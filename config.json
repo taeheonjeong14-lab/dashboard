@@ -1,0 +1,39 @@
+{
+  "chrome": {
+    "debuggingPort": 9222,
+    "description": "Chrome를 '디버깅 포트 9222'로 실행한 뒤 이 스크립트를 실행하세요."
+  },
+  "blog": {
+    "blogId": "howtoanimal",
+    "visitPvUrl": null,
+    "uvUrl": null,
+    "daysCount": 7,
+    "accumulateScrapeDays": 31,
+    "description": "blogId 필수. daysCount: 기본 수집 일수. accumulateScrapeDays: 축적 모드에서 수집할 일수(기본 31일)."
+  },
+  "smartplace": {
+    "statUrl": "https://new.smartplace.naver.com/bizes/place/2945070/statistics?bookingBusinessId=1452977&menu=reports&term=daily",
+    "scrapeDays": 31
+  },
+  "accounts": {
+    "howtoanimal": {
+      "blogId": "howtoanimal",
+      "smartplaceStatUrl": "https://new.smartplace.naver.com/bizes/place/2945070/statistics?bookingBusinessId=1452977&menu=reports&term=daily"
+    },
+    "두번째계정": {
+      "blogId": "두번째블로그",
+      "smartplaceStatUrl": "https://new.smartplace.naver.com/bizes/place/플레이스번호/statistics?bookingBusinessId=비즈니스번호&menu=reports&term=daily"
+    },
+    "세번째계정": {
+      "blogId": "세번째블로그",
+      "smartplaceStatUrl": "https://new.smartplace.naver.com/bizes/place/플레이스번호/statistics?bookingBusinessId=비즈니스번호&menu=reports&term=daily"
+    }
+  },
+  "output": {
+    "dir": "./data",
+    "filenamePrefix": "naver-blog-stat",
+    "saveJson": false,
+    "overwrite": true,
+    "accumulate": true
+  }
+}

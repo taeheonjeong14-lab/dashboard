@@ -1,0 +1,19 @@
+{
+  "name": "naver-blog-stat",
+  "version": "1.0.0",
+  "description": "네이버 블로그 조회수·순방문자 수집 (Chrome 디버깅 모드 연동)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "collect": "node index.js",
+    "chrome": "node scripts/launch-chrome-debug.js"
+  },
+  "keywords": ["naver", "blog", "statistics", "puppeteer", "cdp"],
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "dotenv": "^17.2.3",
+    "puppeteer-core": "^21.0.0",
+    "xlsx": "^0.18.5"
+  }
+}
