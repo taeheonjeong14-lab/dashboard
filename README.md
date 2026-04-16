@@ -30,9 +30,120 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
 ```
 
-3. Supabase SQL Editor에서 `supabase/schema.sql` 실행
+3. Supabase SQL 적용 (둘 중 하나)
+   - **새 프로젝트·초기 구축**: SQL Editor에서 [`supabase/schema.sql`](supabase/schema.sql) 전체 실행
+   - **이미 운영 중인 DB** (전체 스크립트 재실행이 부담스러울 때): SQL Editor에서 [`supabase/migrations/20260416120000_analytics_blog_keyword_targets.sql`](supabase/migrations/20260416120000_analytics_blog_keyword_targets.sql) 한 번 실행 (멱등)
+4. Supabase Dashboard → **Settings → Data API**(또는 API)에서 스키마 **`analytics`** 가 PostgREST에 노출되어 있는지 확인하고, 테이블 **`analytics_blog_keyword_targets`** 가 클라이언트에서 접근 가능한지 확인합니다. (`core` 스키마도 대시보드·RLS에 필요합니다.)
+5. (로컬) `npm install` 후 **`npm run verify:supabase`** — collector 루트 `.env` 또는 `.env.local`을 읽습니다. **`SUPABASE_URL`** 과 **`SUPABASE_SERVICE_ROLE_KEY`(service_role)** 가 있어야 전체 검사가 통과합니다.
 
 환경변수가 없으면 기존처럼 엑셀만 저장됩니다.
+
+## 블로그 키워드 순위: DB 직접 적재
+
+`scripts/naver-rank-main.py`는 순위 수집 결과를 기본적으로 Supabase에 바로 적재합니다.
+
+- 기본 동작: DB 업로드 (엑셀 저장 안 함)
+- 적재 대상: `analytics.analytics_blog_keyword_ranks`
+- 기본 입력 소스: DB (`analytics.analytics_blog_keyword_targets`)
+- 키워드 1행당 `섹션별 4건 + best 1건` 총 5건 upsert
+
+예시:
+
+```bash
+python scripts/naver-rank-main.py
+```
+
+옵션:
+
+- `--metric-date YYYY-MM-DD`: 적재 기준일 지정 (미지정 시 KST 오늘)
+- `--no-db`: DB 업로드 없이 실행
+- `--export-excel`: 결과를 `output.xlsx`로도 저장
+- `--use-debug-chrome`: 통계 수집과 같은 디버깅 Chrome 세션(CDP) 공유
+- `--debug-port 9222`: CDP 포트 지정 (`--use-debug-chrome`과 함께 사용)
+- `--input-source db|excel`: 입력 소스 선택 (기본 `db`)
+
+입력 타깃 테이블(`analytics.analytics_blog_keyword_targets`) 예시 컬럼:
+
+- `account_id` (블로그 ID)
+- `hospital_id` (선택, 권한 필터용)
+- `keyword`
+- `is_active` (true만 수집)
+- `priority` (작을수록 먼저 수집)
+
+키워드 입력·관리 UI는 분리된 dashboard 리포(권장 위치: `C:\Projects\dashboard-ui`)에서 운영합니다. 이 collector 리포는 DB 스키마·마이그레이션·수집 스크립트만 관리합니다.
+
+같은 디버깅 Chrome 창 공유 예시:
+
+```bash
+python scripts/naver-rank-main.py --use-debug-chrome --debug-port 9222
+```
+
+환경변수로도 설정할 수 있습니다:
+
+```bash
+RANK_USE_DEBUG_CHROME=1 CHROME_DEBUGGING_PORT=9222 RANK_INPUT_SOURCE=db python scripts/naver-rank-main.py
+```
+
+엑셀 입력을 계속 사용하려면:
+
+```bash
+python scripts/naver-rank-main.py input.xlsx --input-source excel
+```
+
+## 블로그 키워드 순위: DB에서 엑셀 다운로드용 생성
+
+사용자가 엑셀을 원할 때는 DB 데이터를 기준으로 엑셀을 생성합니다.
+
+```bash
+npm run export:ranks -- output.xlsx
+```
+
+기간 필터(선택):
+
+```bash
+RANK_EXPORT_START_DATE=2026-04-01 RANK_EXPORT_END_DATE=2026-04-30 npm run export:ranks -- april-output.xlsx
+```
+
+## 네이버 검색광고(SearchAd): 병원별 계정 수집
+
+`scripts/naver-searchad-main.py`는 병원별 광고계정을 순회하면서 검색광고 API 데이터를 수집해
+`analytics.analytics_searchad_daily_metrics`에 업서트합니다.
+
+- 계정 입력 테이블: `analytics.analytics_searchad_accounts`
+- 성과 적재 테이블: `analytics.analytics_searchad_daily_metrics`
+- 수집 단위: **캠페인 + 광고그룹**
+- 기본 수집일: KST 전일(D-1) (`SEARCHAD_METRIC_DATE`로 오버라이드 가능)
+
+사전 준비:
+
+1. Supabase SQL 적용 (둘 중 하나)
+   - 신규/전체 반영: `supabase/schema.sql` 실행
+   - 운영 DB 증분 반영: `supabase/migrations/20260416183000_analytics_searchad_tables.sql` 실행
+2. `analytics.analytics_searchad_accounts`에 병원별 계정 입력
+   - `hospital_id`, `customer_id`, `api_license`, `secret_key_encrypted`, `is_active`
+   - `secret_key_encrypted`는 `enc::` 접두어 + 암호문(base64)을 권장하며, 이 경우 `SEARCHAD_SECRET_PASSPHRASE` 필요
+   - 하위 호환으로 평문 값도 동작하지만 운영에서는 비권장
+3. (선택) `.env`에 수집일/패스프레이즈 설정
+
+실행:
+
+```bash
+npm run collect:searchad
+```
+
+또는:
+
+```bash
+python scripts/naver-searchad-main.py
+```
+
+검증:
+
+```bash
+npm run verify:supabase
+```
+
+`verify:supabase`는 SearchAd 관련 테이블 접근(`analytics_searchad_accounts`, `analytics_searchad_daily_metrics`)까지 점검합니다.
 
 ## 1단계: Chrome을 디버깅 포트로 실행
 
@@ -178,19 +289,16 @@ node scripts/launch-chrome-debug.js
 
 위 명령으로 현재 설정 포트 기준 실행 예시가 출력됩니다.
 
-## Vercel 배포 (dashboard)
+## Dashboard 리포 분리 안내
 
-웹 대시보드는 `dashboard` 폴더의 Next.js 앱입니다. Vercel에서 아래처럼 설정하면 배포할 수 있습니다.
+- 시각화/관리 UI는 별도 리포에서 운영합니다 (예: `C:\Projects\dashboard-ui`).
+- 이 collector 리포에서는 DB 변경(DDL, RLS, migration)과 수집 스크립트 실행만 담당합니다.
+- UI 리포는 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`를 사용하고, collector 리포는 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`를 사용합니다.
+- 이 리포(`dashboard-data`)는 Vercel 배포 대상이 아닙니다. 실수 배포 방지를 위해 `vercel.json`의 `ignoreCommand`로 모든 Vercel 빌드를 스킵하도록 설정했습니다.
 
-1. Vercel에서 `New Project` -> 이 GitHub 저장소 선택
-2. `Root Directory`를 `dashboard`로 지정
-3. Environment Variables 추가
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-4. Deploy 실행
+### Vercel 점검 체크리스트 (중요)
 
-### 배포 전 체크
-
-- Supabase 프로젝트 API 설정에서 `analytics`, `core` 스키마가 노출되어 있어야 합니다.
-- `core.users`에 `role`, `hospital_id`가 채워져 있어야 로그인 후 데이터가 보입니다.
-- RLS 정책이 적용된 최신 `supabase/schema.sql`이 실행되어 있어야 합니다.
+1. Vercel Project의 Git Repository가 UI 리포(`dashboard-ui`)를 가리키는지 확인
+2. 기존에 이 리포(`dashboard-data`)에 연결된 Vercel Project가 있다면 해제 또는 삭제
+3. UI 리포에 필요한 환경변수만 Vercel에 등록 (`NEXT_PUBLIC_*`)
+4. 데이터 수집용 비밀키(`SUPABASE_SERVICE_ROLE_KEY`)는 Vercel UI 프로젝트에 넣지 않기
