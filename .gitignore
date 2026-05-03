@@ -1,4 +1,6 @@
 node_modules/
+ddx-api/node_modules/
+ddx-api/.next/
 dashboard/node_modules/
 dashboard/.next/
 .next/
