@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'DDx API',
   description: 'BFF: DDx HTTP API routes (dashboard-data)',

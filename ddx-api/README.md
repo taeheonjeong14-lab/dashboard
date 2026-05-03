@@ -13,10 +13,12 @@ npm run dev                 # http://localhost:3001
 
 `npm run build` needs `DATABASE_URL` set (any valid connection string for `prisma generate` / Prisma init at import time).
 
-## Deploy
+## Deploy (Vercel)
 
-- Separate Vercel project (recommended) or monorepo subpath: set **root directory** to `ddx-api`.
-- Copy env vars from DDx / `docs/BACKEND_HANDOFF.md` in the DDx repository (database, Supabase, Gemini, OpenAI, Resend, `ADMIN_EMAILS`, etc.).
+- **Project** is linked as `ddx-api` (subdirectory of this repo). **Production URL:** `https://ddx-api.vercel.app` (alias; each deploy also gets a `*.vercel.app` URL).
+- In Vercel → **Settings → Environment Variables**, add at least **`DATABASE_URL`** (Supabase Postgres) for **Production** and **Preview** so API routes can talk to the DB at **runtime**. Build no longer requires it, but every Prisma call will fail without it.
+- Copy the rest from DDx / `BACKEND_HANDOFF.md` (Supabase, Gemini, OpenAI, Resend, `ADMIN_EMAILS`, `CRON_SECRET`, etc.) as you enable each feature.
+- Monorepo: if the Vercel project **root directory** is the repo root, set it to **`ddx-api`** so only this app is built.
 
 ## Sync from DDx
 
