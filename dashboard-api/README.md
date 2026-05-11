@@ -25,6 +25,10 @@ npm run dev                 # http://localhost:3002
 - 새 프로젝트를 만들고 **Root Directory** 를 `dashboard-api` 로 지정.
 - `NEXT_PUBLIC_*` 는 dashboard-ui와 동일 Supabase면 동일 값 가능.
 
+### 브라우저 CORS
+
+다른 오리진(예: `vet-solution-hospital-ui`, `vet-solution-admin-ui`)에서 `fetch`로 호출할 때 허용 오리진은 `lib/cors.ts` 기본값과 환경변수 **`DASHBOARD_API_ALLOWED_ORIGINS`**(쉼표 구분)로 확장합니다. 예시는 `.env.example` 참고.
+
 ## 구현된 API (dashboard-ui 스펙)
 
 | 메서드 | 경로 | 설명 |

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
 export const metadata = {
-  title: 'Hospital web (stub)',
-  description: '병원용 통합 UI 자리 — 기존 dashboard-ui / DDx와 병행 운영 후 단계적 이관',
+  title: 'Vet Solution · 병원',
+  description: '병원용 통합 UI — Supabase 로그인 · dashboard-api 연동 스모크',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

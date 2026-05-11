@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
 export const metadata = {
-  title: 'Admin web (stub)',
-  description: '관리자용 통합 UI 자리 — 기존 admin-ui·vet-report·DDx 관리 기능과 병행 후 단계적 이관',
+  title: 'Vet Solution · 관리자',
+  description: '관리자용 통합 UI — Supabase 로그인 · dashboard-api 연동 스모크',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

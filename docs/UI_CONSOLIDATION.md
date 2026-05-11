@@ -93,9 +93,50 @@
 
 ---
 
+## 2a. 사용자 필수 작업 (Vercel · Supabase · API)
+
+레포에 코드가 들어가도 **아래를 직접 설정하지 않으면** 프로덕션에서 로그인·CORS가 동작하지 않습니다.
+
+### Vercel 환경변수 (두 통합 앱 각각)
+
+각 프로젝트 **`vet-solution-hospital-ui`** / **`vet-solution-admin-ui`** → Settings → Environment Variables:
+
+| 변수 | 병원 앱 예시 | 관리자 앱 예시 |
+|------|----------------|----------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase 프로젝트 URL | 동일 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon 공개 키 | 동일 |
+| `NEXT_PUBLIC_SITE_URL` | `https://vet-solution-hospital-ui.vercel.app` | `https://vet-solution-admin-ui.vercel.app` |
+| `NEXT_PUBLIC_DASHBOARD_API_URL` (선택) | `https://dashboard-api-jade.vercel.app` | 동일 |
+
+로컬은 각 앱 폴더의 `.env.example`를 참고해 `.env.local`에 두면 됩니다.
+
+### Supabase Auth
+
+Supabase 대시보드 → Authentication → URL configuration:
+
+- **Site URL:** 각 앱의 프로덕션 베이스 URL(위 `NEXT_PUBLIC_SITE_URL`과 동일하게 맞추는 것을 권장).
+- **Redirect URLs:** 다음 형태를 허용 목록에 추가합니다.
+  - `http://localhost:3010/**`, `http://localhost:3011/**` (로컬)
+  - `https://vet-solution-hospital-ui.vercel.app/auth/callback`
+  - `https://vet-solution-admin-ui.vercel.app/auth/callback`
+  - Vercel 프리뷰 URL을 쓸 경우 해당 호스트의 `/auth/callback`도 추가.
+
+이메일·비밀번호 로그인 외 OAuth를 켤 경우에도 동일 리디렉트 규칙이 적용됩니다.
+
+### dashboard-api CORS
+
+브라우저에서 통합 앱이 `dashboard-api`를 호출하려면 호출 오리진이 허용되어야 합니다.
+
+- 기본 허용 목록은 `dashboard-api/lib/cors.ts`에 있으며, **`vet-solution-hospital-ui`**·**`vet-solution-admin-ui`** 프로덕션 도메인이 포함되어 있습니다.
+- **커스텀 도메인**만 붙일 때는 `dashboard-api` Vercel 프로젝트에 **`DASHBOARD_API_ALLOWED_ORIGINS`**(쉼표 구분)를 추가합니다. 자세한 예는 `dashboard-api/.env.example` 참고.
+- CORS 코드 변경 후 **`dashboard-api`를 재배포**해야 반영됩니다.
+
+---
+
 ## 3. 다음 구현 단계 (에이전트/개발자용)
 
-- 스타브 앱에 실제 라우트·인증을 얹기 전에 **배포 인벤토리**를 맞춘다.
+- **`apps/hospital-web` · `apps/admin-web`:** Supabase SSR(`@supabase/ssr`), `/login`(이메일·비밀번호), `/auth/callback`, `/auth/signout`, 로그인 후 `/dashboard`(브라우저에서 `dashboard-api` `/api/health` CORS 스모크)까지 뼈대 추가됨. 다음은 실제 화면 이관·역할(RBAC)·API 클라이언트 연동.
+- **배포 인벤토리** 표는 통합 진행에 맞춰 계속 갱신한다.
 - **`admin-ui` 폐기:** `admin-web`에 기능 패리티 생기면 워크스페이스·루트 `package.json`의 `admin:*` 스크립트·폴더 정리.
 - 병원 정보 관리처럼 **중복**되는 관리 화면은 `apps/admin-web` 쪽 **단일 진실원**으로 모은 뒤 DDx 관리자에서는 제거 또는 링크만 유지.
 - `dashboard-ui` / 외부 레포 코드는 **`git subtree` 또는 폴더 이관**으로 이 레포 `apps/` 아래로 들여오되, 프로덕션 스위치는 마지막에 한다.

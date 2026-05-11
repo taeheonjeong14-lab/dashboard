@@ -1,15 +1,41 @@
-export default function AdminHomePage() {
+import Link from 'next/link';
+import { createClient } from '@/lib/supabase/server';
+
+export default async function AdminHomePage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
-    <main>
-      <h1 style={{ fontSize: '1.25rem' }}>관리자용 웹 (스타브)</h1>
-      <p style={{ maxWidth: 560, lineHeight: 1.6 }}>
-        이 앱은 통합 작업용 플레이스홀더입니다. 프로덕션에서 쓰는{' '}
-        <strong>admin-ui</strong>(Vite)·<strong>vet-report</strong>·<strong>DDx 관리자</strong> 등은 그대로 두고,
-        검증된 기능부터 여기로 옮깁니다.
-      </p>
-      <p style={{ fontSize: '0.875rem', color: '#555' }}>
-        로컬 개발: 레포 루트에서 <code>npm run admin-web:dev</code> (포트 3011)
-      </p>
+    <main style={{ padding: 24, maxWidth: 560, lineHeight: 1.6 }}>
+      <h1 style={{ fontSize: '1.25rem' }}>관리자용 웹</h1>
+      {user ? (
+        <>
+          <p>
+            <strong>{user.email}</strong> 로 로그인됨
+          </p>
+          <p>
+            <Link href="/dashboard">대시보드로 이동</Link>
+          </p>
+          <p style={{ fontSize: '0.875rem' }}>
+            <Link href="/auth/signout">로그아웃</Link>
+          </p>
+        </>
+      ) : (
+        <>
+          <p>
+            통합 관리자 UI입니다. <strong>admin-ui</strong>(Vite)·<strong>vet-report</strong>·DDx 관리 기능과 병행한 뒤
+            단계적으로 이관합니다.
+          </p>
+          <p>
+            <Link href="/login">로그인</Link>
+          </p>
+          <p style={{ fontSize: '0.8rem', color: '#555' }}>
+            로컬 개발: <code>npm run admin-web:dev</code> (3011)
+          </p>
+        </>
+      )}
     </main>
   );
 }
