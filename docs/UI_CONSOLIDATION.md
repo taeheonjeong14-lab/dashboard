@@ -27,6 +27,8 @@
 
 **Vercel Production 브랜치:** **`main`** 에 연결한다. (`vet-solution-hospital-ui` / `vet-solution-admin-ui` 프로젝트 모두 Settings → Git에서 Production Branch가 `main`인지 확인.)
 
+**배포가 곧바로 “Canceled”일 때:** 레포 루트 `vercel.json`의 **`ignoreCommand`가 `exit 0`** 이면 Vercel이 **빌드를 건너뛴다**(로그에 `process.exit(0)` 한 줄만 나오는 경우). 서브폴더(`apps/hospital-web`) 프로젝트도 루트 설정을 타면 같은 증상이 난다. **항상 빌드하려면 해당 설정을 제거하거나 `exit 1`로 둔다.**
+
 **Root Directory가 안 보일 때:** Vercel은 **GitHub의 `main`** 내용만 본다. `apps/hospital-web`이 **`main`에 커밋·푸시되기 전**이면 목록에 안 뜬다. 로컬에서 `develop`만 고치고 있으면 → **`main`으로 머지(또는 PR 머지) 후 `git push origin main`** → GitHub 웹에서 폴더 존재 확인 → 다시 Vercel에서 import 또는 설정 새로고침.
 
 ---
