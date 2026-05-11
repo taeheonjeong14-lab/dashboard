@@ -1,7 +1,7 @@
 'use client';
 
-import { createBrowserClient } from '@supabase/ssr';
 import { useState, type FormEvent } from 'react';
+import { signInWithPasswordAction } from './actions';
 
 function supabaseEnv(): { url: string; anon: string } | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -21,18 +21,16 @@ export function AdminLoginForm({ forbidden }: Props) {
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const env = supabaseEnv();
-    if (!env) {
+    if (!supabaseEnv()) {
       setMessage('NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY 를 설정하세요.');
       return;
     }
     setLoading(true);
     setMessage(null);
-    const supabase = createBrowserClient(env.url, env.anon);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const result = await signInWithPasswordAction(email, password);
     setLoading(false);
-    if (error) {
-      setMessage(error.message);
+    if (!result.ok) {
+      setMessage(result.error);
       return;
     }
     window.location.href = '/dashboard';
