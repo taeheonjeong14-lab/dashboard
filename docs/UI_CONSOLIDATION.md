@@ -23,7 +23,7 @@
 | **`vet-solution-hospital-ui`** | `apps/hospital-web` | 병원용 통합 UI (스테이징·프로덕션 배포 시 동일 이름 사용 가능) |
 | **`vet-solution-admin-ui`** | `apps/admin-web` | 관리자용 통합 UI |
 
-배포하면 보통 `https://vet-solution-hospital-ui.vercel.app`, `https://vet-solution-admin-ui.vercel.app` 형태의 기본 도메인이 생긴다(팀·프로젝트 설정에 따라 미세하게 다를 수 있음).
+**실제 프로덕션 URL:** [병원 `vet-solution-hospital-ui`](https://vet-solution-hospital-ui.vercel.app/) · [관리자 `vet-solution-admin-ui`](https://vet-solution-admin-ui.vercel.app/) (스타브 페이지 배포됨).
 
 **Vercel Production 브랜치:** **`main`** 에 연결한다. (`vet-solution-hospital-ui` / `vet-solution-admin-ui` 프로젝트 모두 Settings → Git에서 Production Branch가 `main`인지 확인.)
 
@@ -58,8 +58,8 @@
 | dashboard-api | `https://dashboard-api-jade.vercel.app` | `taeheonjeong14-lab/dashboard-data` | `main` | `dashboard-api` | _(예: `dashboard-api-jade`)_ | 사용자 제공 프로덕션 URL. 루트에 서비스 요약·`/api/health` 등 노출. |
 | ddx-api | `https://ddx-api.vercel.app` | `taeheonjeong14-lab/dashboard-data` | `main` | `ddx-api` | `ddx-api` | `ddx-api/README.md`에 명시된 프로덕션 URL(alias). 미세하게 다른 배포 URL도 있을 수 있음 |
 | admin-ui (Vite, 이 레포) | _(비움)_ | `taeheonjeong14-lab/dashboard-data` | `main` | `admin-ui` | 미배포 | **폐기 예정:** `apps/admin-web`으로 옮긴 뒤 폴더·스크립트 제거. 현재는 로컬 `npm run admin:dev`만 |
-| `apps/hospital-web` | 로컬 `http://localhost:3010` _(배포 후 예: `vet-solution-hospital-ui.vercel.app`)_ | `taeheonjeong14-lab/dashboard-data` | `main` | `apps/hospital-web` | **`vet-solution-hospital-ui`** | Vercel 새 프로젝트 생성 시 이 이름·이 Root로 연결 |
-| `apps/admin-web` | 로컬 `http://localhost:3011` _(배포 후 예: `vet-solution-admin-ui.vercel.app`)_ | `taeheonjeong14-lab/dashboard-data` | `main` | `apps/admin-web` | **`vet-solution-admin-ui`** | 위와 동일 |
+| `apps/hospital-web` | **프로덕션:** `https://vet-solution-hospital-ui.vercel.app/` · 로컬 `http://localhost:3010` | `taeheonjeong14-lab/dashboard-data` | `main` | `apps/hospital-web` | **`vet-solution-hospital-ui`** | Vercel 배포 완료(스타브) |
+| `apps/admin-web` | **프로덕션:** `https://vet-solution-admin-ui.vercel.app/` · 로컬 `http://localhost:3011` | `taeheonjeong14-lab/dashboard-data` | `main` | `apps/admin-web` | **`vet-solution-admin-ui`** | Vercel 배포 완료(스타브) |
 
 **브랜치 참고:** 이 `dashboard-data` 레포는 **Vercel Production = `main`** 으로 통일한다. 표의 **배포 브랜치 `main`** 과 같다. 로컬 작업 브랜치가 `develop`이어도 되지만, Vercel·GitHub에 반영하려면 **`main`에 머지 후 푸시**해야 한다.
 
