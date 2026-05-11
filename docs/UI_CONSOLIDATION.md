@@ -138,7 +138,7 @@ Supabase 대시보드 → Authentication → URL configuration:
 브라우저에서 통합 앱이 `dashboard-api`를 호출하려면 호출 오리진이 허용되어야 합니다.
 
 - 기본 허용 목록은 `dashboard-api/lib/cors.ts`에 있으며, **`vet-solution-hospital-ui`**·**`vet-solution-admin-ui`** 프로덕션 도메인이 포함되어 있습니다.
-- **커스텀 도메인**만 붙일 때는 `dashboard-api` Vercel 프로젝트에 **`DASHBOARD_API_ALLOWED_ORIGINS`**(쉼표 구분)를 추가합니다. 자세한 예는 `dashboard-api/.env.example` 참고.
+- **커스텀 도메인**은 `dashboard-api` Vercel에 **`DASHBOARD_API_ALLOWED_ORIGINS`**(쉼표 구분)로 **추가**합니다. 기본 허용(vet-solution·dashboard-ui 등)과 **병합**되므로, env에 커스텀만 넣어도 통합 앱 CORS는 유지됩니다.
 - CORS 코드 변경 후 **`dashboard-api`를 재배포**해야 반영됩니다.
 
 ---

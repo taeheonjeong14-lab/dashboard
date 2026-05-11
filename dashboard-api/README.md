@@ -27,7 +27,7 @@ npm run dev                 # http://localhost:3002
 
 ### 브라우저 CORS
 
-다른 오리진(예: `vet-solution-hospital-ui`, `vet-solution-admin-ui`)에서 `fetch`로 호출할 때 허용 오리진은 `lib/cors.ts` 기본값과 환경변수 **`DASHBOARD_API_ALLOWED_ORIGINS`**(쉼표 구분)로 확장합니다. 예시는 `.env.example` 참고.
+다른 오리진에서 `fetch`로 호출할 때 허용 오리진은 `lib/cors.ts` **기본 목록**과 환경변수 **`DASHBOARD_API_ALLOWED_ORIGINS`**(쉼표 구분)를 **병합**합니다. 커스텀 도메인만 env에 넣어도 vet-solution·dashboard-ui 기본 허용은 유지됩니다.
 
 ## 구현된 API (dashboard-ui 스펙)
 
