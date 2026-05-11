@@ -108,8 +108,11 @@
 | `NEXT_PUBLIC_SITE_URL` | `https://vet-solution-hospital-ui.vercel.app` | `https://vet-solution-admin-ui.vercel.app` |
 | `NEXT_PUBLIC_DASHBOARD_API_URL` (선택) | `https://dashboard-api-jade.vercel.app` | 동일 |
 | `DDX_API_BASE_URL` | _(비움)_ | **필수:** `https://ddx-api.vercel.app` 등 — 서버에서만 `/api/admin/check` 호출 |
+| `SUPABASE_SERVICE_ROLE_KEY` | _(비움)_ | **필수(관리자 `/admin`):** 서버만 — 병원·차트 업로드 API가 DB에 접근할 때 사용. **`NEXT_PUBLIC_` 붙이지 말 것** |
 
 로컬은 각 앱 폴더의 `.env.example`를 참고해 `.env.local`에 두면 됩니다.
+
+**프로덕션 배포 순서 (`vet-solution-admin-ui`):** Git `main` 연결·Root Directory `apps/admin-web` 확인 → 위 표 변수를 Production에 입력 → **Redeploy** → `https://vet-solution-admin-ui.vercel.app/login` 후 **`/admin`** 확인.
 
 ### admin-web 관리자 인가 (ddx-api 연동)
 

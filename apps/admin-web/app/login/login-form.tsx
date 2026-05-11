@@ -27,13 +27,13 @@ export function AdminLoginForm({ forbidden }: Props) {
     }
     setLoading(true);
     setMessage(null);
-    const result = await signInWithPasswordAction(email, password);
-    setLoading(false);
-    if (!result.ok) {
-      setMessage(result.error);
-      return;
+    try {
+      const result = await signInWithPasswordAction(email, password);
+      if (!result.ok) setMessage(result.error);
+      /* 성공 시 서버 액션에서 redirect('/dashboard') — 클라이언트는 리다이렉트 응답으로 이동 */
+    } finally {
+      setLoading(false);
     }
-    window.location.href = '/dashboard';
   }
 
   return (

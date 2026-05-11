@@ -1,5 +1,6 @@
 'use server';
 
+import { redirect } from 'next/navigation';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
@@ -25,13 +26,9 @@ export async function signInWithPasswordAction(email: string, password: string):
         return cookieStore.getAll();
       },
       setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options),
-          );
-        } catch {
-          /* Server Component boundary — ignore */
-        }
+        cookiesToSet.forEach(({ name, value, options }) =>
+          cookieStore.set(name, value, options),
+        );
       },
     },
   });
@@ -44,5 +41,5 @@ export async function signInWithPasswordAction(email: string, password: string):
   if (error) {
     return { ok: false, error: error.message };
   }
-  return { ok: true };
+  redirect('/dashboard');
 }
