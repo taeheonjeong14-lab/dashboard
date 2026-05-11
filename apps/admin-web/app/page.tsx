@@ -23,6 +23,9 @@ export default async function AdminHomePage() {
             <strong>{user.email}</strong> 로 로그인됨
           </p>
           <p>
+            <Link href="/admin">데이터 관리 (레거시 admin-ui)</Link>
+          </p>
+          <p>
             <Link href="/dashboard">대시보드로 이동</Link>
           </p>
           <p style={{ fontSize: '0.875rem' }}>

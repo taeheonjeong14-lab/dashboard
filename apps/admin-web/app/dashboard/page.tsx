@@ -20,6 +20,8 @@ export default async function AdminDashboardPage() {
       </p>
       <DashboardApiSmoke apiBase={apiBase} />
       <p style={{ marginTop: 24, fontSize: '0.875rem' }}>
+        <Link href="/admin">데이터 관리</Link>
+        {' · '}
         <Link href="/auth/signout">로그아웃</Link>
         {' · '}
         <Link href="/">홈</Link>
