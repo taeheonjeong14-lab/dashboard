@@ -58,15 +58,18 @@ async function main() {
 
   console.log("Supabase 점검 중...\n");
 
-  const hospitals = await restGet("/rest/v1/hospitals?select=id,naver_blog_id&limit=1", {
-    key: serviceKey,
-    profile: "core",
-  });
+  const hospitals = await restGet(
+    "/rest/v1/hospitals?select=id,naver_blog_id,searchad_customer_id,googleads_customer_id&limit=1",
+    {
+      key: serviceKey,
+      profile: "core",
+    }
+  );
   if (!hospitals.ok) {
     console.error("core.hospitals 응답:", hospitals.status, hospitals.text.slice(0, 500));
     fail("core 스키마 접근 실패. Data API에서 `core` 노출 여부를 확인하세요.");
   }
-  ok("core.hospitals 조회 가능");
+  ok("core.hospitals 조회 가능 (SearchAd/Google Ads 컬럼 포함)");
 
   const targets = await restGet("/rest/v1/analytics_blog_keyword_targets?select=id&limit=1", {
     key: serviceKey,
@@ -81,20 +84,6 @@ async function main() {
     fail("analytics 스키마 또는 analytics_blog_keyword_targets 접근 실패");
   }
   ok("analytics.analytics_blog_keyword_targets 조회 가능");
-
-  const searchadAccounts = await restGet("/rest/v1/analytics_searchad_accounts?select=id&limit=1", {
-    key: serviceKey,
-    profile: "analytics",
-  });
-  if (!searchadAccounts.ok) {
-    console.error(
-      "analytics.analytics_searchad_accounts 응답:",
-      searchadAccounts.status,
-      searchadAccounts.text.slice(0, 500)
-    );
-    fail("analytics_searchad_accounts 접근 실패 (schema.sql 또는 migration 반영 확인)");
-  }
-  ok("analytics.analytics_searchad_accounts 조회 가능");
 
   const searchadMetrics = await restGet("/rest/v1/analytics_searchad_daily_metrics?select=metric_date&limit=1", {
     key: serviceKey,

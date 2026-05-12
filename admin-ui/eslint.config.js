@@ -15,7 +15,11 @@ export default defineConfig([
     ],
     languageOptions: {
       ecmaVersion: 2020,
-      globals: globals.browser,
+      globals: {
+        ...globals.browser,
+        __ADMIN_SUPABASE_URL__: "readonly",
+        __ADMIN_SUPABASE_SERVICE_ROLE_KEY__: "readonly",
+      },
       parserOptions: {
         ecmaVersion: 'latest',
         ecmaFeatures: { jsx: true },

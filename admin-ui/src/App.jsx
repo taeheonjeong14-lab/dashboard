@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { buildPreview, executeChartUpload } from "./lib/chartUpload";
+import { buildPreview, collapseRowsForDedupeUpload, executeChartUpload } from "./lib/chartUpload";
 import { fileToSha256, parseIntoVetWorkbook } from "./lib/intovet";
 import { parseWoorienPmsWorkbook } from "./lib/woorienPms";
 import { parseEFriendsFile } from "./lib/efriends";
@@ -21,8 +21,8 @@ function formatSupabaseError(err) {
   return extra ? `${msg} (${extra})` : msg;
 }
 
-const supabaseUrl = cleanEnv(import.meta.env.VITE_SUPABASE_URL);
-const supabaseKey = cleanEnv(import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY);
+const supabaseUrl = cleanEnv(import.meta.env.VITE_SUPABASE_URL || __ADMIN_SUPABASE_URL__);
+const supabaseKey = cleanEnv(import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || __ADMIN_SUPABASE_SERVICE_ROLE_KEY__);
 
 const supabase =
   supabaseUrl && supabaseKey
@@ -34,6 +34,7 @@ const CHART_TYPES = [
   { value: "woorien_pms", label: "Woorien PMS" },
   { value: "efriends", label: "eFriends" },
 ];
+const INTO_VET_AMOUNT_COLUMNS = ["BS", "CB", "CC"];
 
 const CHART_TYPE_HELP = {
   common: [
@@ -73,6 +74,25 @@ const EMPTY_FORM = {
   googleads_customer_id: "",
   googleads_refresh_token_encrypted: "",
 };
+
+/** 목록·실적 업로드 드롭다운용 — DB에 searchad/googleads 마이그레이션 없어도 조회 가능해야 함 */
+const HOSPITAL_LIST_COLUMNS =
+  "id,name,naver_blog_id,smartplace_stat_url,debug_port";
+
+/** 수정 폼용 — 컬럼 없으면 조회 실패 시 빈 값으로 둠 */
+async function fetchHospitalAdsColumns(hospitalId) {
+  if (!supabase || !hospitalId) return {};
+  const { data, error } = await supabase
+    .schema("core")
+    .from("hospitals")
+    .select(
+      "searchad_customer_id,searchad_api_license,searchad_secret_key_encrypted,googleads_customer_id,googleads_refresh_token_encrypted"
+    )
+    .eq("id", hospitalId)
+    .maybeSingle();
+  if (error) return {};
+  return data || {};
+}
 
 function createHospitalId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -124,6 +144,7 @@ function App() {
   const [editingId, setEditingId] = useState("");
   const [selectedHospitalId, setSelectedHospitalId] = useState("");
   const [selectedChartType, setSelectedChartType] = useState(CHART_TYPES[0].value);
+  const [selectedIntoVetAmountColumn, setSelectedIntoVetAmountColumn] = useState("BS");
   /** Snapshot after one successful read — avoids repeat File.arrayBuffer() (DOMException on some hosts). */
   const [uploadSnapshot, setUploadSnapshot] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -138,22 +159,42 @@ function App() {
 
   async function refreshAll() {
     if (!supabase) {
-      setMessage("VITE_SUPABASE_URL / VITE_SUPABASE_SERVICE_ROLE_KEY 설정이 필요합니다.");
+      setMessage(
+        "Supabase URL·키가 필요합니다. 프로젝트 루트 또는 admin-ui 의 `.env` 에 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 또는 VITE_* 동일 변수를 넣어 주세요."
+      );
       return;
     }
     setLoading(true);
     setMessage("");
     try {
-      const h = await supabase
-        .schema("core")
-        .from("hospitals")
-        .select("id,name,naver_blog_id,smartplace_stat_url,debug_port")
-        .order("name", { ascending: true });
-      if (h.error) throw h.error;
-      setHospitals(h.data || []);
-      setMessage("데이터를 새로고침했습니다.");
+      const attempts = [
+        { cols: HOSPITAL_LIST_COLUMNS, orderByName: true },
+        { cols: "id,name", orderByName: true },
+        { cols: "id,name", orderByName: false },
+      ];
+      let lastError = null;
+      for (const att of attempts) {
+        let query = supabase.schema("core").from("hospitals").select(att.cols);
+        if (att.orderByName) query = query.order("name", { ascending: true });
+        const res = await query;
+        if (!res.error) {
+          const rows = res.data || [];
+          setHospitals(rows);
+          if (rows.length === 0) {
+            setMessage(
+              "조회는 성공했지만 병원이 0건입니다. Supabase의 core.hospitals에 행이 있는지, Settings → API 의 Exposed schemas에 core가 포함됐는지 확인하세요."
+            );
+          } else {
+            setMessage(`데이터를 새로고침했습니다. (${rows.length}건)`);
+          }
+          return;
+        }
+        lastError = res.error;
+      }
+      throw lastError || new Error("병원 목록 조회에 실패했습니다.");
     } catch (e) {
-      setMessage(`조회 실패: ${e.message || e}`);
+      setMessage(`조회 실패: ${formatSupabaseError(e)}`);
+      setHospitals([]);
     } finally {
       setLoading(false);
     }
@@ -190,14 +231,14 @@ function App() {
       debug_port: row.debug_port == null ? "" : String(row.debug_port),
       blog_keywords_text: "",
       place_keywords_text: "",
-      searchad_customer_id: "",
-      searchad_api_license: "",
-      searchad_secret_key_encrypted: "",
-      googleads_customer_id: "",
-      googleads_refresh_token_encrypted: "",
+      searchad_customer_id: row.searchad_customer_id || "",
+      searchad_api_license: row.searchad_api_license || "",
+      searchad_secret_key_encrypted: row.searchad_secret_key_encrypted || "",
+      googleads_customer_id: row.googleads_customer_id || "",
+      googleads_refresh_token_encrypted: row.googleads_refresh_token_encrypted || "",
     };
     try {
-      const [bt, pt, sa, ga] = await Promise.all([
+      const [bt, pt] = await Promise.all([
         supabase
           .schema("analytics")
           .from("analytics_blog_keyword_targets")
@@ -210,39 +251,22 @@ function App() {
           .select("keyword")
           .eq("hospital_id", String(row.id))
           .eq("is_active", true),
-        supabase
-          .schema("analytics")
-          .from("analytics_searchad_accounts")
-          .select("customer_id,api_license,secret_key_encrypted,is_active")
-          .eq("hospital_id", String(row.id))
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .schema("analytics")
-          .from("analytics_googleads_accounts")
-          .select("customer_id,refresh_token_encrypted,is_active")
-          .eq("hospital_id", String(row.id))
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
       ]);
       if (bt.error) throw bt.error;
       if (pt.error) throw pt.error;
-      if (sa.error) throw sa.error;
-      if (ga.error) throw ga.error;
 
       base.blog_keywords_text = buildKeywordText(bt.data || []);
       base.place_keywords_text = buildKeywordText(pt.data || []);
-      if (sa.data) {
-        base.searchad_customer_id = sa.data.customer_id || "";
-        base.searchad_api_license = sa.data.api_license || "";
-        base.searchad_secret_key_encrypted = sa.data.secret_key_encrypted || "";
-      }
-      if (ga.data) {
-        base.googleads_customer_id = ga.data.customer_id || "";
-        base.googleads_refresh_token_encrypted = ga.data.refresh_token_encrypted || "";
-      }
+
+      const ads = await fetchHospitalAdsColumns(String(row.id || ""));
+      if (ads.searchad_customer_id != null) base.searchad_customer_id = String(ads.searchad_customer_id || "");
+      if (ads.searchad_api_license != null) base.searchad_api_license = String(ads.searchad_api_license || "");
+      if (ads.searchad_secret_key_encrypted != null)
+        base.searchad_secret_key_encrypted = String(ads.searchad_secret_key_encrypted || "");
+      if (ads.googleads_customer_id != null) base.googleads_customer_id = String(ads.googleads_customer_id || "");
+      if (ads.googleads_refresh_token_encrypted != null)
+        base.googleads_refresh_token_encrypted = String(ads.googleads_refresh_token_encrypted || "");
+
       setHospitalForm(base);
       setIsModalOpen(true);
     } catch (e) {
@@ -264,6 +288,16 @@ function App() {
     setMessage("");
     try {
       const hospitalId = editingId || createHospitalId();
+      const scid = hospitalForm.searchad_customer_id.trim();
+      const sal = hospitalForm.searchad_api_license.trim();
+      const ssec = hospitalForm.searchad_secret_key_encrypted.trim();
+      const searchadReady = !!(scid && sal && ssec);
+      const searchadClear = !scid && !sal && !ssec;
+      const gcid = hospitalForm.googleads_customer_id.trim().replace(/-/g, "");
+      const grt = hospitalForm.googleads_refresh_token_encrypted.trim();
+      const googleadsReady = !!(gcid && grt);
+      const googleadsClear = !gcid && !grt;
+
       const payload = {
         id: hospitalId,
         name: hospitalForm.name.trim(),
@@ -271,6 +305,27 @@ function App() {
         smartplace_stat_url: hospitalForm.smartplace_stat_url.trim() || null,
         debug_port: hospitalForm.debug_port ? Number(hospitalForm.debug_port) : null,
       };
+      // 세 필드가 모두 채워졌을 때만 반영. 부분 입력이면 기존 DB 값 유지(PostgREST upsert는 보낸 컬럼만 갱신).
+      if (searchadReady) {
+        payload.searchad_customer_id = scid;
+        payload.searchad_api_license = sal;
+        payload.searchad_secret_key_encrypted = ssec;
+        payload.searchad_is_active = true;
+      } else if (searchadClear) {
+        payload.searchad_customer_id = null;
+        payload.searchad_api_license = null;
+        payload.searchad_secret_key_encrypted = null;
+        payload.searchad_is_active = false;
+      }
+      if (googleadsReady) {
+        payload.googleads_customer_id = gcid;
+        payload.googleads_refresh_token_encrypted = grt;
+        payload.googleads_is_active = true;
+      } else if (googleadsClear) {
+        payload.googleads_customer_id = null;
+        payload.googleads_refresh_token_encrypted = null;
+        payload.googleads_is_active = false;
+      }
       await upsertHospitalWithCompat(payload);
 
       const resolvedHospitalId = String(hospitalId || payload.id || "").trim();
@@ -313,43 +368,6 @@ function App() {
         if (ptErr) throw ptErr;
       }
 
-      if (
-        hospitalForm.searchad_customer_id.trim() &&
-        hospitalForm.searchad_api_license.trim() &&
-        hospitalForm.searchad_secret_key_encrypted.trim()
-      ) {
-        const { error: saErr } = await supabase
-          .schema("analytics")
-          .from("analytics_searchad_accounts")
-          .upsert(
-            {
-              hospital_id: resolvedHospitalId,
-              customer_id: hospitalForm.searchad_customer_id.trim(),
-              api_license: hospitalForm.searchad_api_license.trim(),
-              secret_key_encrypted: hospitalForm.searchad_secret_key_encrypted.trim(),
-              is_active: true,
-            },
-            { onConflict: "hospital_id,customer_id" }
-          );
-        if (saErr) throw saErr;
-      }
-
-      if (hospitalForm.googleads_customer_id.trim()) {
-        const { error: gaErr } = await supabase
-          .schema("analytics")
-          .from("analytics_googleads_accounts")
-          .upsert(
-            {
-              hospital_id: resolvedHospitalId,
-              customer_id: hospitalForm.googleads_customer_id.trim().replace(/-/g, ""),
-              refresh_token_encrypted: hospitalForm.googleads_refresh_token_encrypted.trim() || null,
-              is_active: true,
-            },
-            { onConflict: "hospital_id,customer_id" }
-          );
-        if (gaErr) throw gaErr;
-      }
-
       setMessage("병원 정보를 저장했습니다.");
       closeModal();
       await refreshAll();
@@ -383,7 +401,9 @@ function App() {
     try {
       let parsed;
       if (selectedChartType === "intovet") {
-        parsed = await parseIntoVetWorkbook(uploadSnapshot.bytes, selectedHospitalId);
+        parsed = await parseIntoVetWorkbook(uploadSnapshot.bytes, selectedHospitalId, {
+          amountColumn: selectedIntoVetAmountColumn,
+        });
       } else if (selectedChartType === "woorien_pms") {
         parsed = await parseWoorienPmsWorkbook(uploadSnapshot.bytes, selectedHospitalId);
       } else if (selectedChartType === "efriends") {
@@ -391,11 +411,15 @@ function App() {
       } else {
         throw new Error(`아직 지원하지 않는 차트 종류입니다: ${selectedChartType}`);
       }
+      const collapsed = collapseRowsForDedupeUpload(parsed.chartType || selectedChartType, parsed.rows);
       const p = buildPreview(parsed.rows, parsed.errors);
+      p.estimatedDbRowsAfterDedupe = collapsed.length;
       setPreview(p);
       setPreviewRows(parsed.rows);
       setPreviewErrors(parsed.errors);
-      setMessage(`미리보기 완료: 정상 ${parsed.rows.length}행 / 오류 ${parsed.errors.length}행`);
+      setMessage(
+        `미리보기 완료: 정상 ${parsed.rows.length}행 (dedupe 반영 시 DB raw 예상 ${collapsed.length}행) / 오류 ${parsed.errors.length}행`
+      );
     } catch (e) {
       setMessage(`미리보기 실패: ${e.message || e}`);
       setPreview(null);
@@ -447,6 +471,20 @@ function App() {
         <p className="envCheck">
           env check: URL={supabaseUrl ? "OK" : "MISSING"} / KEY={supabaseKey ? "OK" : "MISSING"}
         </p>
+        {!supabaseUrl || !supabaseKey ? (
+          <p className="envHint" style={{ fontSize: 13, opacity: 0.9, maxWidth: 720 }}>
+            아래 중 <strong>한 곳</strong>에 넣고 dev 서버를 <strong>재시작</strong>하세요.
+            <br />
+            · <code>{`dashboard-data/.env`}</code> 또는 <code>{`dashboard-data/.env.local`}</code>
+            <br />
+            · <code>{`dashboard-data/admin-ui/.env`}</code> 또는 <code>{`dashboard-data/admin-ui/.env.local`}</code>
+            <br />
+            변수 이름: <code>SUPABASE_URL</code> + <code>SUPABASE_SERVICE_ROLE_KEY</code>
+            (또는 동일 값의 <code>VITE_SUPABASE_URL</code> / <code>VITE_SUPABASE_SERVICE_ROLE_KEY</code>)
+            <br />
+            예시는 <code>admin-ui/.env.example</code> 참고.
+          </p>
+        ) : null}
       </header>
       <div className="actions">
         <button className="secondaryBtn" onClick={() => void refreshAll()} disabled={loading}>
@@ -495,6 +533,28 @@ function App() {
               ))}
             </select>
           </label>
+          {selectedChartType === "intovet" && (
+            <label>
+              IntoVet 금액 컬럼
+              <select
+                value={selectedIntoVetAmountColumn}
+                onChange={(e) => {
+                  setSelectedIntoVetAmountColumn(e.target.value);
+                  setPreview(null);
+                  setPreviewRows([]);
+                  setPreviewErrors([]);
+                  setUploadResult(null);
+                }}
+                disabled={loading}
+              >
+                {INTO_VET_AMOUNT_COLUMNS.map((col) => (
+                  <option key={col} value={col}>
+                    {col}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div style={{ gridColumn: "1 / -1", fontSize: 12, opacity: 0.85, lineHeight: 1.4 }}>
             <div>
               <strong>차트별 기준 안내</strong>
@@ -556,6 +616,14 @@ function App() {
             <div>오류 행: {preview.errorRows}</div>
             <div>예상 매출 합계: {preview.estimatedSalesAmount.toLocaleString()}</div>
             <div>예상 진료건수(unique customer+patient/day): {preview.uniqueVisitCount}</div>
+            {preview.estimatedDbRowsAfterDedupe != null && (
+              <div style={{ marginTop: 4 }}>
+                dedupe 후 DB raw 예상 행 수: <strong>{preview.estimatedDbRowsAfterDedupe}</strong>
+                <span style={{ fontSize: 12, opacity: 0.85, marginLeft: 6 }}>
+                  (IntoVet 등은 영수증·금액 기준 키가 같으면 한 줄로 합쳐짐)
+                </span>
+              </div>
+            )}
             <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
               <strong>방문 집계 기준</strong>: {chartHelp[0] || "차트별 안내를 확인하세요."}
             </div>
@@ -579,7 +647,14 @@ function App() {
         {uploadResult && (
           <div className="summaryBox">
             <div>run_id: {uploadResult.runId}</div>
-            <div>적재 행: {uploadResult.importedRows}</div>
+            <div>
+              DB raw 적재 행: {uploadResult.importedRows}
+              {uploadResult.parsedRows != null && uploadResult.parsedRows !== uploadResult.importedRows && (
+                <span style={{ fontSize: 12, opacity: 0.85, marginLeft: 6 }}>
+                  (파싱 {uploadResult.parsedRows}행 중 dedupe로 합쳐짐)
+                </span>
+              )}
+            </div>
             <div>오류 행: {uploadResult.errorRows}</div>
             <div>신규 고객 마스터 추가: {uploadResult.customerInserted ?? 0}</div>
             <div>고객 마스터 업데이트: {uploadResult.customerUpdated ?? 0}</div>

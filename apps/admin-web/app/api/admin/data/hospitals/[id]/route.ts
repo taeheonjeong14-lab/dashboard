@@ -21,12 +21,28 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   try {
     const supabase = createServiceRoleClient();
 
-    const { data: row, error: rowErr } = await supabase
-      .schema('core')
-      .from('hospitals')
-      .select('id,name,naver_blog_id,smartplace_stat_url,debug_port')
-      .eq('id', hospitalId)
-      .maybeSingle();
+    const rowAttempts = [
+      'id,name,name_en,code,phone,address,addressDetail,logoUrl,brandColor,director_name_ko,seal_url,tagline_line1,tagline_line2,blog_intro,blog_outro,naver_blog_id,smartplace_stat_url,debug_port',
+      'id,name,name_en,code,phone,address,address_detail,logo_url,brand_color,director_name_ko,seal_url,tagline_line1,tagline_line2,blog_intro,blog_outro,naver_blog_id,smartplace_stat_url,debug_port',
+      'id,name,naver_blog_id,smartplace_stat_url,debug_port',
+    ];
+
+    let row: Record<string, unknown> | null = null;
+    let rowErr: unknown = null;
+    for (const cols of rowAttempts) {
+      const res = await supabase
+        .schema('core')
+        .from('hospitals')
+        .select(cols)
+        .eq('id', hospitalId)
+        .maybeSingle();
+      if (!res.error) {
+        row = (res.data || null) as Record<string, unknown> | null;
+        rowErr = null;
+        break;
+      }
+      rowErr = res.error;
+    }
 
     if (rowErr) throw rowErr;
     if (!row) {
@@ -55,9 +71,22 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
     const base = {
       id: String(row.id || ''),
-      name: row.name || '',
-      naver_blog_id: row.naver_blog_id || '',
-      smartplace_stat_url: row.smartplace_stat_url || '',
+      name: String(row.name || ''),
+      name_en: String(row.name_en || ''),
+      code: String(row.code || ''),
+      phone: String(row.phone || ''),
+      address: String(row.address || ''),
+      addressDetail: String((row.addressDetail ?? row.address_detail) || ''),
+      logoUrl: String((row.logoUrl ?? row.logo_url) || ''),
+      brandColor: String((row.brandColor ?? row.brand_color) || ''),
+      director_name_ko: String(row.director_name_ko || ''),
+      seal_url: String(row.seal_url || ''),
+      tagline_line1: String(row.tagline_line1 || ''),
+      tagline_line2: String(row.tagline_line2 || ''),
+      blog_intro: String(row.blog_intro || ''),
+      blog_outro: String(row.blog_outro || ''),
+      naver_blog_id: String(row.naver_blog_id || ''),
+      smartplace_stat_url: String(row.smartplace_stat_url || ''),
       debug_port: row.debug_port == null ? '' : String(row.debug_port),
       blog_keywords_text: buildKeywordText(bt.data || []),
       place_keywords_text: buildKeywordText(pt.data || []),

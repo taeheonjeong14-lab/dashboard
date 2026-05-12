@@ -151,6 +151,7 @@ Supabase 대시보드 → Authentication → URL configuration:
 - **`apps/hospital-web` · `apps/admin-web`:** Supabase SSR(`@supabase/ssr`), `/login`(이메일·비밀번호), `/auth/callback`, `/auth/signout`, 로그인 후 `/dashboard`(브라우저에서 `dashboard-api` `/api/health` CORS 스모크)까지 뼈대 추가됨.
 - **`apps/admin-web`:** 비관리자는 `DDX_API_BASE_URL`·ddx-api `ADMIN_EMAILS` / `core.users.role` 기준으로 홈·대시보드 진입 차단.
 - 다음은 실제 화면 이관·추가 RBAC·API 클라이언트 연동.
+- **통계(admin):** [`apps/admin-web`](../apps/admin-web) 내장 통계 + [`docs/DASHBOARD_UI_ADMIN_INTEGRATION.md`](./DASHBOARD_UI_ADMIN_INTEGRATION.md) (`/admin/performance`; 참고용 UI 소스는 [`apps/dashboard-ui`](../apps/dashboard-ui)).
 - **배포 인벤토리** 표는 통합 진행에 맞춰 계속 갱신한다.
 - **`admin-ui` 폐기:** `admin-web`에 기능 패리티 생기면 워크스페이스·루트 `package.json`의 `admin:*` 스크립트·폴더 정리.
 - 병원 정보 관리처럼 **중복**되는 관리 화면은 `apps/admin-web` 쪽 **단일 진실원**으로 모은 뒤 DDx 관리자에서는 제거 또는 링크만 유지.

@@ -69,7 +69,7 @@ python scripts/naver-rank-main.py
 - `keyword`
 - `is_active` (true만 수집)
 
-키워드 입력·관리 UI는 분리된 dashboard 리포(권장 위치: `C:\Projects\dashboard-ui`)에서 운영합니다. 이 collector 리포는 DB 스키마·마이그레이션·수집 스크립트만 관리합니다.
+키워드 입력·관리 UI는 분리된 dashboard 리포(권장 위치: `C:\Projects\dashboard-ui`)에서 운영합니다. 이 collector 리포는 DB 스키마·마이그레이션·수집 스크립트만 관리합니다. 같은 패턴의 통계 화면은 이 레포 [`apps/dashboard-ui`](apps/dashboard-ui)에 두고, admin [`/admin/performance`](apps/admin-web/app/admin/performance/page.tsx)는 해당 UX를 **iframe 없이** 내장합니다(가이드: [`docs/DASHBOARD_UI_ADMIN_INTEGRATION.md`](docs/DASHBOARD_UI_ADMIN_INTEGRATION.md)).
 
 같은 디버깅 Chrome 창 공유 예시:
 
@@ -165,7 +165,8 @@ RANK_EXPORT_START_DATE=2026-04-01 RANK_EXPORT_END_DATE=2026-04-30 npm run export
 `scripts/naver-searchad-main.py`는 병원별 광고계정을 순회하면서 검색광고 API 데이터를 수집해
 `analytics.analytics_searchad_daily_metrics`에 업서트합니다.
 
-- 계정 입력 테이블: `analytics.analytics_searchad_accounts`
+- 계정 입력: `core.hospitals`의 SearchAd 컬럼
+  - `searchad_customer_id`, `searchad_api_license`, `searchad_secret_key_encrypted`, `searchad_is_active`
 - 성과 적재 테이블: `analytics.analytics_searchad_daily_metrics`
 - 수집 단위: **캠페인 + 광고그룹**
 - 기본 수집 구간: 계정별 `analytics_searchad_daily_metrics`의 `max(metric_date)` 다음날 ~ **KST 어제**. 데이터가 없으면 **어제 포함 30일**. `SEARCHAD_METRIC_DATE`를 켜면 증분을 끄고 그날만 수집
@@ -175,8 +176,8 @@ RANK_EXPORT_START_DATE=2026-04-01 RANK_EXPORT_END_DATE=2026-04-30 npm run export
 1. Supabase SQL 적용 (둘 중 하나)
    - 신규/전체 반영: `supabase/schema.sql` 실행
    - 운영 DB 증분 반영: `supabase/migrations/20260416183000_analytics_searchad_tables.sql` 실행
-2. `analytics.analytics_searchad_accounts`에 병원별 계정 입력
-   - `hospital_id`, `customer_id`, `api_license`, `secret_key_encrypted`, `is_active`
+2. `core.hospitals`에 병원별 계정 입력
+   - `searchad_customer_id`, `searchad_api_license`, `searchad_secret_key_encrypted`, `searchad_is_active`
    - `secret_key_encrypted`는 `enc::` 접두어 + 암호문(base64)을 권장하며, 이 경우 `SEARCHAD_SECRET_PASSPHRASE` 필요
    - 하위 호환으로 평문 값도 동작하지만 운영에서는 비권장
 3. (선택) `.env`에 수집일/패스프레이즈 설정
@@ -199,7 +200,7 @@ python scripts/naver-searchad-main.py
 npm run verify:supabase
 ```
 
-`verify:supabase`는 SearchAd 관련 테이블 접근(`analytics_searchad_accounts`, `analytics_searchad_daily_metrics`)까지 점검합니다.
+`verify:supabase`는 `core.hospitals`의 SearchAd·Google Ads 컬럼 노출과 `analytics_searchad_daily_metrics` 등 접근을 점검합니다.
 
 ## 로컬 운영 UI (admin-ui)
 
@@ -215,10 +216,9 @@ npm run admin:dev
 ```
 
 관리 대상:
-- `core.hospitals` (`name`, `naver_blog_id`, `smartplace_stat_url`, `debug_port`)
+- `core.hospitals` (`name`, `naver_blog_id`, `smartplace_stat_url`, `debug_port`, SearchAd/Google Ads 컬럼)
 - `analytics.analytics_blog_keyword_targets`
 - `analytics.analytics_place_keyword_targets`
-- `analytics.analytics_searchad_accounts`
 - `analytics.chart_*` (IntoVet 원본/환자마스터/일간 KPI)
 
 IntoVet 업로드 파이프라인:

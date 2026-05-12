@@ -1,5 +1,5 @@
-import AdminDataConsole from '@/components/admin-data-console';
+import { redirect } from 'next/navigation';
 
 export default function AdminPage() {
-  return <AdminDataConsole />;
+  redirect('/admin/performance');
 }

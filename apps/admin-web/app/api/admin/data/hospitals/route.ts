@@ -19,6 +19,16 @@ export async function GET() {
   }
 
   const attempts = [
+    // addressDetail camelCase schema
+    { cols: 'id,name,address,addressDetail', orderByName: true },
+    { cols: 'id,name,address,addressDetail', orderByName: false },
+    // address_detail snake_case schema
+    { cols: 'id,name,address,address_detail', orderByName: true },
+    { cols: 'id,name,address,address_detail', orderByName: false },
+    // address only
+    { cols: 'id,name,address', orderByName: true },
+    { cols: 'id,name,address', orderByName: false },
+    // legacy fallback
     { cols: HOSPITAL_LIST_COLUMNS, orderByName: true },
     { cols: 'id,name', orderByName: true },
     { cols: 'id,name', orderByName: false },

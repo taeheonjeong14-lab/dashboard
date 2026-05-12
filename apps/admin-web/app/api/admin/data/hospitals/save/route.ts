@@ -27,6 +27,19 @@ type FormBody = {
   editingId?: string;
   hospitalForm: {
     name: string;
+    name_en?: string;
+    code?: string;
+    phone?: string;
+    address?: string;
+    addressDetail?: string;
+    logoUrl?: string;
+    brandColor?: string;
+    director_name_ko?: string;
+    seal_url?: string;
+    tagline_line1?: string;
+    tagline_line2?: string;
+    blog_intro?: string;
+    blog_outro?: string;
     naver_blog_id?: string;
     smartplace_stat_url?: string;
     debug_port?: string;
@@ -73,6 +86,19 @@ export async function POST(request: Request) {
     const payload: Record<string, unknown> = {
       id: hospitalId,
       name: hospitalForm.name.trim(),
+      name_en: (hospitalForm.name_en || '').trim() || null,
+      code: (hospitalForm.code || '').trim() || null,
+      phone: (hospitalForm.phone || '').trim() || null,
+      address: (hospitalForm.address || '').trim() || null,
+      addressDetail: (hospitalForm.addressDetail || '').trim() || null,
+      logoUrl: (hospitalForm.logoUrl || '').trim() || null,
+      brandColor: (hospitalForm.brandColor || '').trim() || null,
+      director_name_ko: (hospitalForm.director_name_ko || '').trim() || null,
+      seal_url: (hospitalForm.seal_url || '').trim() || null,
+      tagline_line1: (hospitalForm.tagline_line1 || '').trim() || null,
+      tagline_line2: (hospitalForm.tagline_line2 || '').trim() || null,
+      blog_intro: (hospitalForm.blog_intro || '').trim() || null,
+      blog_outro: (hospitalForm.blog_outro || '').trim() || null,
       naver_blog_id: (hospitalForm.naver_blog_id || '').trim() || null,
       smartplace_stat_url: (hospitalForm.smartplace_stat_url || '').trim() || null,
       debug_port: hospitalForm.debug_port ? Number(hospitalForm.debug_port) : null,

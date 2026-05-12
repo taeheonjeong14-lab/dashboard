@@ -26,7 +26,7 @@ npm run admin:dev
 - 병원별 포트 (`core.hospitals.debug_port`)
 - 블로그 키워드 타깃 (`analytics.analytics_blog_keyword_targets`)
 - 플레이스 키워드 타깃 (`analytics.analytics_place_keyword_targets`)
-- SearchAd 계정 (`analytics.analytics_searchad_accounts`)
+- SearchAd / Google Ads 계정 필드 (`core.hospitals`의 `searchad_*`, `googleads_*`)
 - IntoVet 실적 업로드 (`analytics.chart_*`)
 
 ## 병원 실적 업로드 (차트 업로드)

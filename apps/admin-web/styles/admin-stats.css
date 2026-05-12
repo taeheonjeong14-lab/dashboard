@@ -1,0 +1,6 @@
+@import "../../../node_modules/tailwindcss/index.css";
+
+/* 통계 영역 — admin-web 라이트 톤(Tailwind 유틸 + 차트) */
+.adminStatsTheme input[type='checkbox'] {
+  accent-color: #3b82f6;
+}

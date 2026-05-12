@@ -7,8 +7,13 @@ const INTO_VET_MIN_COLS = {
   customerName: 2, // C
   patientName: 3, // D
   receiptNo: 5, // F
-  finalAmount: 70, // BS
 };
+const INTO_VET_AMOUNT_COL_INDEX = {
+  BS: 70,
+  CB: 79,
+  CC: 80,
+};
+const DEFAULT_INTO_VET_AMOUNT_COLUMN = "BS";
 const INTO_VET_HEADER_ROW_COUNT = 2;
 
 function excelDateToYmd(value) {
@@ -53,6 +58,12 @@ function amountToNumber(value) {
   const cleaned = String(value).replace(/[,\s]/g, "").trim();
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
+}
+
+function resolveIntoVetFinalAmount(row, amountColumn) {
+  const col = String(amountColumn || DEFAULT_INTO_VET_AMOUNT_COLUMN).toUpperCase();
+  const idx = INTO_VET_AMOUNT_COL_INDEX[col] ?? INTO_VET_AMOUNT_COL_INDEX[DEFAULT_INTO_VET_AMOUNT_COLUMN];
+  return amountToNumber(row?.[idx]);
 }
 
 function normalizeText(value) {
@@ -126,7 +137,8 @@ export async function fileToSha256(source) {
   return Array.from(view).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function parseIntoVetWorkbook(source, hospitalId) {
+export async function parseIntoVetWorkbook(source, hospitalId, options = {}) {
+  const amountColumn = String(options?.amountColumn || DEFAULT_INTO_VET_AMOUNT_COLUMN).toUpperCase();
   const bytes = source instanceof ArrayBuffer ? source : await source.arrayBuffer();
   const workbook = XLSX.read(bytes, { type: "array", cellDates: true });
   const sheetName = workbook.SheetNames[0];
@@ -153,7 +165,7 @@ export async function parseIntoVetWorkbook(source, hospitalId) {
     const customerNameRaw = normalizeText(row[INTO_VET_MIN_COLS.customerName]);
     const patientNameRaw = normalizeText(row[INTO_VET_MIN_COLS.patientName]);
     const receiptNoRaw = normalizeText(row[INTO_VET_MIN_COLS.receiptNo]);
-    const finalAmountRaw = amountToNumber(row[INTO_VET_MIN_COLS.finalAmount]);
+    const finalAmountRaw = resolveIntoVetFinalAmount(row, amountColumn);
 
     const rowNo = i + 1;
 

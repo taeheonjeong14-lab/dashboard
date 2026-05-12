@@ -26,6 +26,30 @@ function throwDbError(error, context) {
   throw new Error(`${context}: ${details || "Unknown database error"}`);
 }
 
+/**
+ * IntoVet / Woorien / eFriends: Postgres 단일 upsert에서 같은 dedupe_key가 두 번 오면 안 되므로
+ * 업로드 직전에 동일 dedupe_key는 소스 행 번호가 큰 쪽 한 줄만 남김.
+ * 이 때문에 파싱 행 수와 chart_transactions_raw 실제 행 수가 크게 다를 수 있음.
+ */
+export function collapseRowsForDedupeUpload(chartType, rows) {
+  const usesDedupeKey = chartType === "intovet" || chartType === "woorien_pms" || chartType === "efriends";
+  if (!usesDedupeKey || !rows?.length) return rows || [];
+  const byDedupeKey = new Map();
+  const passthrough = [];
+  for (const row of rows) {
+    const key = String(row?.dedupe_key || "").trim();
+    if (!key) {
+      passthrough.push(row);
+      continue;
+    }
+    const old = byDedupeKey.get(key);
+    if (!old || Number(row?.source_row_no || 0) >= Number(old?.source_row_no || 0)) {
+      byDedupeKey.set(key, row);
+    }
+  }
+  return [...passthrough, ...byDedupeKey.values()];
+}
+
 export function buildPreview(rows, errors) {
   const byDate = groupBy(rows, (r) => r.service_date);
   const knownRows = rows.filter((r) => !r.is_unknown_identity);
@@ -74,27 +98,22 @@ async function updateRunProgress(supabase, runId, patch) {
 }
 
 async function upsertRawTransactions(supabase, runId, hospitalId, chartType, sourceFileName, sourceFileHash, rows) {
-  if (!rows.length) return;
+  if (!rows.length) return { parsedRowCount: 0, dbRawRowCount: 0 };
+
+  // Same workbook (same hash)를 다시 올리면 `dedupe_key` 기준 upsert만으로는
+  // unique(hospital_id, chart_type, source_file_hash, source_row_no) 와 맞지 않아 INSERT가 터질 수 있음.
+  // 이 파일 해시로 이미 들어간 raw를 먼저 비우고, 다른 업로드와의 병합은 아래 dedupe_key upsert가 담당.
+  const { error: delPriorError } = await supabase
+    .schema("analytics")
+    .from("chart_transactions_raw")
+    .delete()
+    .eq("hospital_id", hospitalId)
+    .eq("chart_type", chartType)
+    .eq("source_file_hash", sourceFileHash);
+  throwDbError(delPriorError, "chart_transactions_raw delete prior rows for same file hash");
+
   const usesDedupeKey = chartType === "intovet" || chartType === "woorien_pms" || chartType === "efriends";
-  let effectiveRows = rows;
-  if (usesDedupeKey) {
-    // Postgres ON CONFLICT cannot update the same constrained key twice in one statement.
-    // Collapse duplicate dedupe_key rows inside one upload payload, keeping the latest source row.
-    const byDedupeKey = new Map();
-    const passthrough = [];
-    for (const row of rows) {
-      const key = String(row?.dedupe_key || "").trim();
-      if (!key) {
-        passthrough.push(row);
-        continue;
-      }
-      const old = byDedupeKey.get(key);
-      if (!old || Number(row?.source_row_no || 0) >= Number(old?.source_row_no || 0)) {
-        byDedupeKey.set(key, row);
-      }
-    }
-    effectiveRows = [...passthrough, ...byDedupeKey.values()];
-  }
+  const effectiveRows = collapseRowsForDedupeUpload(chartType, rows);
   const payload = effectiveRows.map((r) => ({
     run_id: runId,
     hospital_id: hospitalId,
@@ -119,11 +138,21 @@ async function upsertRawTransactions(supabase, runId, hospitalId, chartType, sou
   const onConflict = usesDedupeKey
     ? "hospital_id,chart_type,dedupe_key"
     : "hospital_id,chart_type,source_file_hash,source_row_no";
-  const { error } = await supabase
-    .schema("analytics")
-    .from("chart_transactions_raw")
-    .upsert(payload, { onConflict });
-  throwDbError(error, "chart_transactions_raw upsert");
+
+  const RAW_UPSERT_BATCH = 400;
+  for (let offset = 0; offset < payload.length; offset += RAW_UPSERT_BATCH) {
+    const slice = payload.slice(offset, offset + RAW_UPSERT_BATCH);
+    const { error } = await supabase
+      .schema("analytics")
+      .from("chart_transactions_raw")
+      .upsert(slice, { onConflict });
+    throwDbError(error, `chart_transactions_raw upsert batch @${offset}`);
+  }
+
+  return {
+    parsedRowCount: rows.length,
+    dbRawRowCount: payload.length,
+  };
 }
 
 async function mergeCustomerMaster(supabase, hospitalId, chartType, rows) {
@@ -375,7 +404,15 @@ export async function executeChartUpload({
     await updateRunProgress(supabase, runId, {
       metadata: { stage: currentStage },
     });
-    await upsertRawTransactions(supabase, runId, hospitalId, chartType, sourceFileName, sourceFileHash, parsedRows);
+    const rawStats = await upsertRawTransactions(
+      supabase,
+      runId,
+      hospitalId,
+      chartType,
+      sourceFileName,
+      sourceFileHash,
+      parsedRows
+    );
 
     // Rebuild master/link/kpis from raw inside DB for strong consistency.
     currentStage = "rebuild_in_db";
@@ -393,13 +430,15 @@ export async function executeChartUpload({
       .from("chart_upload_runs")
       .update({
         status: "completed",
-        imported_rows: parsedRows.length,
-        skipped_rows: 0,
+        imported_rows: rawStats.dbRawRowCount,
+        skipped_rows: Math.max(0, parsedRows.length - rawStats.dbRawRowCount),
         error_rows: parseErrors.length,
         finished_at: new Date().toISOString(),
         metadata: {
           stage: "completed",
           rebuild: rebuildResult || {},
+          parsed_row_count: parsedRows.length,
+          db_raw_row_count: rawStats.dbRawRowCount,
         },
       })
       .eq("id", runId);
@@ -407,7 +446,8 @@ export async function executeChartUpload({
 
     return {
       runId,
-      importedRows: parsedRows.length,
+      importedRows: rawStats.dbRawRowCount,
+      parsedRows: parsedRows.length,
       errorRows: parseErrors.length,
       customerInserted: rebuildResult?.customer_upserts ?? 0,
       customerUpdated: 0,

@@ -41,5 +41,5 @@ export async function signInWithPasswordAction(email: string, password: string):
   if (error) {
     return { ok: false, error: error.message };
   }
-  redirect('/dashboard');
+  redirect('/admin');
 }

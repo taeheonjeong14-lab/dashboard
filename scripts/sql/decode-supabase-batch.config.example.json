@@ -1,0 +1,65 @@
+{
+  "_note": "이 파일을 decode-supabase-batch.config.json 로 복사한 뒤 jobs 목록을 채우세요. 리포 루트에서: node scripts/sql/decode-supabase-batch.mjs",
+  "jobs": [
+    {
+      "input": "scripts/sql/tmp/paste-generated-run-content.json",
+      "output": "scripts/sql/tmp/generated-run-content-inserts.sql",
+      "table": "generated_run_content"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-attach-export-for-decoder.json",
+      "output": "scripts/sql/tmp/share-links-inserts.sql",
+      "table": "health_review_share_links"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-documents-export-for-decoder.json",
+      "output": "scripts/sql/tmp/documents-inserts.sql",
+      "table": "documents"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-parse-runs-export-for-decoder.json",
+      "output": "scripts/sql/tmp/parse-runs-inserts.sql",
+      "table": "parse_runs"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-report-case-images-export-for-decoder.json",
+      "output": "scripts/sql/tmp/report-case-images-inserts.sql",
+      "table": "report_case_images"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-result-basic-info-export-for-decoder.json",
+      "output": "scripts/sql/tmp/result-basic-info-inserts.sql",
+      "table": "result_basic_info"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-result-chart-by-date-export-for-decoder.json",
+      "output": "scripts/sql/tmp/result-chart-by-date-inserts.sql",
+      "table": "result_chart_by_date"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-result-lab-items-export-for-decoder.json",
+      "output": "scripts/sql/tmp/result-lab-items-inserts.sql",
+      "table": "result_lab_items"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-result-physical-exam-items-export-for-decoder.json",
+      "output": "scripts/sql/tmp/result-physical-exam-items-inserts.sql",
+      "table": "result_physical_exam_items"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-result-plan-rows-export-for-decoder.json",
+      "output": "scripts/sql/tmp/result-plan-rows-inserts.sql",
+      "table": "result_plan_rows"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-result-vaccination-records-export-for-decoder.json",
+      "output": "scripts/sql/tmp/result-vaccination-records-inserts.sql",
+      "table": "result_vaccination_records"
+    },
+    {
+      "input": "scripts/sql/tmp/paste-result-vitals-export-for-decoder.json",
+      "output": "scripts/sql/tmp/result-vitals-inserts.sql",
+      "table": "result_vitals"
+    }
+  ]
+}

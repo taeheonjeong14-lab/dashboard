@@ -44,9 +44,6 @@ export function AdminLoginForm({ forbidden }: Props) {
           <a href="/auth/signout">로그아웃</a>
         </p>
       ) : null}
-      <p style={{ fontSize: '0.875rem', color: '#555', lineHeight: 1.5 }}>
-        Supabase 이메일·비밀번호 로그인입니다.
-      </p>
       {!configured ? (
         <p role="status" style={{ color: '#856404', fontSize: '0.875rem', marginTop: 12 }}>
           빌드·실행 환경에 Supabase 공개 환경변수가 없습니다. Vercel 또는 <code>.env.local</code>을 확인하세요.
@@ -61,7 +58,7 @@ export function AdminLoginForm({ forbidden }: Props) {
             value={email}
             onChange={(ev) => setEmail(ev.target.value)}
             required
-            style={{ padding: '8px 10px' }}
+            style={{ padding: '8px 10px', background: '#fff' }}
           />
         </label>
         <label style={{ display: 'grid', gap: 4 }}>
@@ -72,10 +69,10 @@ export function AdminLoginForm({ forbidden }: Props) {
             value={password}
             onChange={(ev) => setPassword(ev.target.value)}
             required
-            style={{ padding: '8px 10px' }}
+            style={{ padding: '8px 10px', background: '#fff' }}
           />
         </label>
-        <button type="submit" disabled={loading} style={{ padding: '10px 12px', marginTop: 8 }}>
+        <button type="submit" disabled={loading} style={{ padding: '10px 12px', marginTop: 8, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 14, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}>
           {loading ? '처리 중…' : '로그인'}
         </button>
       </form>
@@ -84,9 +81,6 @@ export function AdminLoginForm({ forbidden }: Props) {
           {message}
         </p>
       ) : null}
-      <p style={{ marginTop: 24, fontSize: '0.8rem' }}>
-        <a href="/">← 처음으로</a>
-      </p>
     </>
   );
 }

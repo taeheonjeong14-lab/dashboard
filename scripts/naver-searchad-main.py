@@ -1,7 +1,7 @@
 """
 네이버 검색광고(SearchAd) 병원별 수집기
 
-- 입력: analytics.analytics_searchad_accounts (활성 계정)
+- 입력: core.hospitals (searchad_* 컬럼, searchad_is_active=true)
 - 출력: analytics.analytics_searchad_daily_metrics (일별 캠페인 + 광고그룹 단위 성과)
 - 기본 기간: (hospital_id, customer_id)별 DB max(metric_date) 다음날 ~ KST 어제(D-1).
   해당 조합에 행이 없으면 KST 어제 포함 30일(환경변수 SEARCHAD_METRICS_INITIAL_DAYS로 변경 가능).
@@ -142,24 +142,41 @@ def fetch_active_accounts(
     service_key: str,
     hospital_id: str | None = None,
 ) -> list[dict[str, Any]]:
+    # primary source: core.hospitals
     params = {
-        "select": "hospital_id,customer_id,api_license,secret_key_encrypted",
-        "is_active": "eq.true",
-        "order": "hospital_id.asc,customer_id.asc",
+        "select": "id,searchad_customer_id,searchad_api_license,searchad_secret_key_encrypted,searchad_is_active",
+        "searchad_is_active": "eq.true",
+        "order": "id.asc",
     }
     if hospital_id:
-        params["hospital_id"] = f"eq.{hospital_id}"
-    url = f"{supabase_url.rstrip('/')}/rest/v1/analytics_searchad_accounts?{urlencode(params)}"
-    req = Request(url, headers=_supabase_headers(service_key, profile="analytics"), method="GET")
+        params["id"] = f"eq.{hospital_id}"
+    url = f"{supabase_url.rstrip('/')}/rest/v1/hospitals?{urlencode(params)}"
+    req = Request(url, headers=_supabase_headers(service_key, profile="core"), method="GET")
     try:
         with urlopen(req, timeout=20) as res:
-            return json.loads(res.read().decode("utf-8")) or []
+            rows = json.loads(res.read().decode("utf-8")) or []
+            mapped = []
+            for r in rows:
+                hid = str(r.get("id") or "").strip()
+                customer_id = str(r.get("searchad_customer_id") or "").strip()
+                api_license = str(r.get("searchad_api_license") or "").strip()
+                secret = str(r.get("searchad_secret_key_encrypted") or "").strip()
+                if not hid or not customer_id or not api_license or not secret:
+                    continue
+                mapped.append(
+                    {
+                        "hospital_id": hid,
+                        "customer_id": customer_id,
+                        "api_license": api_license,
+                        "secret_key_encrypted": secret,
+                    }
+                )
+            return mapped
     except HTTPError as e:
         body = e.read().decode("utf-8", errors="ignore")
         raise RuntimeError(
-            "analytics_searchad_accounts 조회 실패: "
-            f"status={e.code}, body={body[:500]}. "
-            "schema.sql 또는 20260416183000_analytics_searchad_tables.sql 반영 여부를 확인하세요."
+            "core.hospitals SearchAd 계정 조회 실패: "
+            f"status={e.code}, body={body[:500]}."
         ) from e
 
 
@@ -349,16 +366,20 @@ def upsert_daily_metrics(supabase_url: str, service_key: str, rows: list[dict[st
 
 def update_last_synced_at(supabase_url: str, service_key: str, hospital_id: str, customer_id: str) -> None:
     now_iso = datetime.now(timezone.utc).isoformat()
-    params = {
-        "hospital_id": f"eq.{hospital_id}",
-        "customer_id": f"eq.{customer_id}",
-    }
-    url = f"{supabase_url.rstrip('/')}/rest/v1/analytics_searchad_accounts?{urlencode(params)}"
-    body = {"last_synced_at": now_iso}
-    headers = _supabase_headers(service_key, profile="analytics")
+    params = {"id": f"eq.{hospital_id}"}
+    url = f"{supabase_url.rstrip('/')}/rest/v1/hospitals?{urlencode(params)}"
+    body = {"searchad_last_synced_at": now_iso}
+    headers = _supabase_headers(service_key, profile="core")
     req = Request(url, data=json.dumps(body).encode("utf-8"), headers=headers, method="PATCH")
-    with urlopen(req, timeout=20):
-        pass
+    try:
+        with urlopen(req, timeout=20):
+            return
+    except HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(
+            "core.hospitals searchad_last_synced_at 갱신 실패: "
+            f"status={e.code}, body={body[:500]}."
+        ) from e
 
 
 def collect_one_account(
@@ -460,7 +481,7 @@ def main() -> None:
 
     accounts = fetch_active_accounts(supabase_url, service_key, hospital_id=target_hospital_id or None)
     if not accounts:
-        print("ℹ️ 활성 SearchAd 계정이 없습니다. analytics.analytics_searchad_accounts를 확인하세요.")
+        print("ℹ️ 활성 SearchAd 계정이 없습니다. core.hospitals 의 searchad_* 및 searchad_is_active 를 확인하세요.")
         return
 
     end_date_kst = _to_kst_date_str(-1)

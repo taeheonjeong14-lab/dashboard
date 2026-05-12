@@ -9,6 +9,8 @@ dashboard/.next/
 data/*.json
 .env
 .env.local
+.env.storage-migrate
 admin-ui/.env.local
 dashboard/.env.local
 *.log
+scripts/sql/decode-supabase-batch.config.json

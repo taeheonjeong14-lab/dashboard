@@ -6,6 +6,8 @@ import { NextResponse } from 'next/server';
  * 추가 도메인은 Vercel 환경변수 `DASHBOARD_API_ALLOWED_ORIGINS`(쉼표 구분)로 확장.
  */
 const DASHBOARD_API_DEFAULT_ORIGINS = [
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
   'http://localhost:3010',
   'http://localhost:3011',
   'http://localhost:5173',

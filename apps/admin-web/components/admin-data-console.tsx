@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { buildPreview, collapseRowsForDedupeUpload } from '@/lib/legacy/chartUpload.js';
 import { fileToSha256, parseIntoVetWorkbook } from '@/lib/legacy/intovet.js';
@@ -42,6 +41,19 @@ const CHART_TYPE_HELP: Record<string, string[]> = {
 const EMPTY_FORM = {
   id: '',
   name: '',
+  name_en: '',
+  code: '',
+  phone: '',
+  address: '',
+  addressDetail: '',
+  logoUrl: '',
+  brandColor: '',
+  director_name_ko: '',
+  seal_url: '',
+  tagline_line1: '',
+  tagline_line2: '',
+  blog_intro: '',
+  blog_outro: '',
   naver_blog_id: '',
   smartplace_stat_url: '',
   debug_port: '',
@@ -54,7 +66,11 @@ const EMPTY_FORM = {
   googleads_refresh_token_encrypted: '',
 };
 
-export default function AdminDataConsole() {
+type AdminDataConsoleMode = 'all' | 'performance' | 'hospitals';
+
+export default function AdminDataConsole({ mode = 'all' }: { mode?: AdminDataConsoleMode }) {
+  const showUpload = mode === 'all' || mode === 'performance';
+  const showHospitals = mode === 'all' || mode === 'hospitals';
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [hospitals, setHospitals] = useState<
@@ -165,6 +181,41 @@ export default function AdminDataConsole() {
     }
   }
 
+  async function uploadHospitalAsset(assetType: 'logo' | 'seal', file: File | undefined) {
+    const hospitalId = String(editingId || hospitalForm.id || '').trim();
+    if (!hospitalId) {
+      setMessage('신규 병원은 먼저 저장해 hospital_id를 만든 뒤 로고/도장 업로드가 가능합니다.');
+      return;
+    }
+    if (!file) return;
+
+    setLoading(true);
+    setMessage('');
+    try {
+      const form = new FormData();
+      form.set('asset_type', assetType);
+      form.set('file', file);
+      const res = await fetch(`/api/admin/data/hospitals/${encodeURIComponent(hospitalId)}/assets`, {
+        method: 'POST',
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '업로드 실패');
+
+      const nextUrl = String(data.url || '');
+      if (assetType === 'logo') {
+        setHospitalForm((f) => ({ ...f, logoUrl: nextUrl }));
+      } else {
+        setHospitalForm((f) => ({ ...f, seal_url: nextUrl }));
+      }
+      setMessage(`${assetType === 'logo' ? '로고' : '도장'} 업로드 완료`);
+    } catch (e) {
+      setMessage(`자산 업로드 실패: ${formatSupabaseError(e)}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function onBuildPreview() {
     if (!selectedHospitalId) {
       setMessage('업로드할 병원을 먼저 선택해 주세요.');
@@ -261,28 +312,22 @@ export default function AdminDataConsole() {
 
   return (
     <div className="adminLegacyPage">
-      <header className="adminLegacyTopHeader">
-        <h1>Dashboard Data Admin</h1>
-        <p>병원 목록 조회/추가/수정 · 실적 업로드 (레거시 admin-ui 이관)</p>
-        <p style={{ fontSize: 14 }}>
-          <Link href="/">← 홈</Link>
-          {' · '}
-          <Link href="/dashboard">대시보드</Link>
-        </p>
-        <p className="adminLegacyEnvCheck">
-          서버 Service Role: {srOk === true ? 'OK' : srOk === false ? 'MISSING (Vercel에 SUPABASE_SERVICE_ROLE_KEY)' : '…'}
-        </p>
-      </header>
+      <p className="adminLegacyEnvCheck">
+        서버 Service Role: {srOk === true ? 'OK' : srOk === false ? 'MISSING (Vercel에 SUPABASE_SERVICE_ROLE_KEY)' : '…'}
+      </p>
       <div className="adminLegacyActions">
         <button type="button" className="adminLegacySecondaryBtn" onClick={() => void refreshAll()} disabled={loading}>
           새로고침
         </button>
-        <button type="button" className="adminLegacyPrimaryBtn" onClick={openCreateModal} disabled={loading}>
-          + 병원 추가
-        </button>
+        {showHospitals ? (
+          <button type="button" className="adminLegacyPrimaryBtn" onClick={openCreateModal} disabled={loading}>
+            + 병원 추가
+          </button>
+        ) : null}
       </div>
       <div className="adminLegacyStatus">{loading ? '처리 중...' : message || '준비'}</div>
-      <section className="adminLegacyPanel">
+      {showUpload ? (
+        <section className="adminLegacyPanel">
         <h2>병원 실적 업로드</h2>
         <div className="adminLegacyUploadGrid">
           <label>
@@ -444,8 +489,10 @@ export default function AdminDataConsole() {
             <div>영향 일자 수: {String(uploadResult.affectedDays ?? '')}</div>
           </div>
         )}
-      </section>
-      <section className="adminLegacyPanel">
+        </section>
+      ) : null}
+      {showHospitals ? (
+        <section className="adminLegacyPanel">
         <h2>병원 목록 ({hospitals.length})</h2>
         <div className="adminLegacyTableWrap">
           <table>
@@ -477,9 +524,10 @@ export default function AdminDataConsole() {
             </tbody>
           </table>
         </div>
-      </section>
+        </section>
+      ) : null}
 
-      {isModalOpen && (
+      {showHospitals && isModalOpen && (
         <div className="adminLegacyModalBackdrop" onClick={closeModal} role="presentation">
           <div className="adminLegacyModalCard" onClick={(e) => e.stopPropagation()} role="dialog">
             <h3>{editingId ? '병원 정보 수정' : '병원 추가'}</h3>
@@ -497,6 +545,99 @@ export default function AdminDataConsole() {
                 placeholder="naver_blog_id"
                 value={hospitalForm.naver_blog_id}
                 onChange={(e) => setHospitalForm((f) => ({ ...f, naver_blog_id: e.target.value }))}
+              />
+              <input
+                placeholder="name_en (영문 병원명)"
+                value={hospitalForm.name_en}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, name_en: e.target.value }))}
+              />
+              <input
+                placeholder="code (병원 코드)"
+                value={hospitalForm.code}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, code: e.target.value }))}
+              />
+              <input
+                placeholder="phone (전화번호)"
+                value={hospitalForm.phone}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, phone: e.target.value }))}
+              />
+              <input
+                placeholder="address (병원 주소)"
+                value={hospitalForm.address}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, address: e.target.value }))}
+              />
+              <input
+                placeholder="addressDetail (병원 상세주소)"
+                value={hospitalForm.addressDetail}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, addressDetail: e.target.value }))}
+              />
+              <input
+                placeholder="logoUrl (병원 로고 URL)"
+                value={hospitalForm.logoUrl}
+                readOnly
+                disabled
+              />
+              <label style={{ fontSize: 12, color: '#334155' }}>
+                로고 파일 업로드 (png/jpg/jpeg/webp/svg)
+                <input
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp,.svg"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    void uploadHospitalAsset('logo', file);
+                  }}
+                  disabled={loading}
+                />
+              </label>
+              <input
+                placeholder="brandColor (병원 BI 컬러, 예: #0ea5e9)"
+                value={hospitalForm.brandColor}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, brandColor: e.target.value }))}
+              />
+              <input
+                placeholder="director_name_ko (대표원장 이름)"
+                value={hospitalForm.director_name_ko}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, director_name_ko: e.target.value }))}
+              />
+              <input
+                placeholder="seal_url (대표원장 도장 URL)"
+                value={hospitalForm.seal_url}
+                readOnly
+                disabled
+              />
+              <label style={{ fontSize: 12, color: '#334155' }}>
+                도장 파일 업로드 (png/jpg/jpeg/webp/svg)
+                <input
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp,.svg"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    void uploadHospitalAsset('seal', file);
+                  }}
+                  disabled={loading}
+                />
+              </label>
+              <input
+                placeholder="tagline_line1 (병원 슬로건 첫번째 줄)"
+                value={hospitalForm.tagline_line1}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, tagline_line1: e.target.value }))}
+              />
+              <input
+                placeholder="tagline_line2 (병원 슬로건 두번째 줄)"
+                value={hospitalForm.tagline_line2}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, tagline_line2: e.target.value }))}
+              />
+              <textarea
+                rows={3}
+                placeholder="blog_intro (블로그 인트로)"
+                value={hospitalForm.blog_intro}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, blog_intro: e.target.value }))}
+              />
+              <textarea
+                rows={3}
+                placeholder="blog_outro (블로그 아웃트로)"
+                value={hospitalForm.blog_outro}
+                onChange={(e) => setHospitalForm((f) => ({ ...f, blog_outro: e.target.value }))}
               />
               <input
                 placeholder="smartplace_stat_url"

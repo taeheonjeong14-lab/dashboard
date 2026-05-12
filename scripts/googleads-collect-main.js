@@ -129,15 +129,28 @@ async function main() {
 
   const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
 
-  const accountsQuery = supabase
-    .schema("analytics")
-    .from("analytics_googleads_accounts")
-    .select("hospital_id,customer_id,refresh_token_encrypted,is_active,metadata")
-    .eq("is_active", true)
-    .order("hospital_id", { ascending: true })
-    .order("customer_id", { ascending: true });
-  const { data: accounts, error: accErr } = hospitalId ? await accountsQuery.eq("hospital_id", hospitalId) : await accountsQuery;
-  if (accErr) throw accErr;
+  // Primary: core.hospitals
+  const hospitalsQuery = supabase
+    .schema("core")
+    .from("hospitals")
+    .select(
+      "id,googleads_customer_id,googleads_refresh_token_encrypted,googleads_is_active,googleads_last_synced_at,googleads_metadata"
+    )
+    .eq("googleads_is_active", true)
+    .order("id", { ascending: true });
+  const { data: hospitalRows, error: hospitalErr } = hospitalId
+    ? await hospitalsQuery.eq("id", hospitalId)
+    : await hospitalsQuery;
+  if (hospitalErr) throw hospitalErr;
+  const accounts =
+    (hospitalRows || [])
+      .map((r) => ({
+        hospital_id: String(r.id || "").trim(),
+        customer_id: String(r.googleads_customer_id || "").trim(),
+        refresh_token_encrypted: String(r.googleads_refresh_token_encrypted || "").trim(),
+        metadata: r.googleads_metadata && typeof r.googleads_metadata === "object" ? r.googleads_metadata : {},
+      }))
+      .filter((r) => r.hospital_id && r.customer_id && r.refresh_token_encrypted) || [];
 
   if (!accounts?.length) {
     console.log("No active Google Ads accounts found.");
@@ -211,13 +224,13 @@ async function main() {
       .upsert(payload, { onConflict: "metric_date,hospital_id,customer_id" });
     if (upErr) throw upErr;
 
-    const { error: touchErr } = await supabase
-      .schema("analytics")
-      .from("analytics_googleads_accounts")
-      .update({ last_synced_at: new Date().toISOString() })
-      .eq("hospital_id", acc.hospital_id)
-      .eq("customer_id", customerId);
-    if (touchErr) throw touchErr;
+    // Primary touch: core.hospitals
+    const { error: touchCoreErr } = await supabase
+      .schema("core")
+      .from("hospitals")
+      .update({ googleads_last_synced_at: new Date().toISOString() })
+      .eq("id", acc.hospital_id);
+    if (touchCoreErr) throw touchCoreErr;
 
     console.log(
       `OK: hospital_id=${acc.hospital_id}, customer_id=${customerId}, days=${payload.length}, range=${effectiveStart}..${endDate}`

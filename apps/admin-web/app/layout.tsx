@@ -1,4 +1,12 @@
 import type { ReactNode } from 'react';
+import { Noto_Sans_KR } from 'next/font/google';
+import './globals.css';
+
+const notoSansKR = Noto_Sans_KR({
+  subsets: ['latin'],
+  weight: ['400', '500', '700'],
+  display: 'swap',
+});
 
 export const metadata = {
   title: 'Vet Solution · 관리자',
@@ -7,8 +15,8 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ko">
-      <body style={{ fontFamily: 'system-ui, sans-serif', margin: 0, padding: 24 }}>{children}</body>
+    <html lang="ko" className={notoSansKR.className}>
+      <body>{children}</body>
     </html>
   );
 }
