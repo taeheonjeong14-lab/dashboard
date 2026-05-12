@@ -1,87 +1,278 @@
 'use client';
 
-import { createBrowserClient } from '@supabase/ssr';
-import { useState, type FormEvent } from 'react';
+import { Suspense, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 
-function supabaseEnv(): { url: string; anon: string } | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
-  if (!url || !anon) return null;
-  return { url, anon };
+function LoginContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const msg = searchParams.get('message');
+    if (msg) setMessage({ type: 'error', text: decodeURIComponent(msg) });
+  }, [searchParams]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage(null);
+    setLoading(true);
+
+    try {
+      const supabase = createClient();
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) throw error;
+
+      const userId = authData.user?.id;
+      if (userId) {
+        const { data: coreUser } = await supabase
+          .schema('core')
+          .from('users')
+          .select('approved')
+          .eq('id', userId)
+          .single();
+
+        if (coreUser && coreUser.approved === false) {
+          await supabase.auth.signOut();
+          setMessage({
+            type: 'warning',
+            text: '승인 대기 중입니다. 관리자 승인 후 이용 가능합니다.',
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      router.push('/dashboard');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '오류가 발생했습니다.';
+      setMessage({ type: 'error', text: msg });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={styles.container}>
+      <div style={styles.card}>
+        <div style={styles.logoArea}>
+          <span style={styles.logoIcon}>🐾</span>
+          <h1 style={styles.title}>VetSolution</h1>
+          <p style={styles.subtitle}>동물병원 통합 관리 플랫폼</p>
+        </div>
+
+        <form onSubmit={handleSubmit} style={styles.form}>
+          <div style={styles.field}>
+            <label htmlFor="email" style={styles.label}>이메일</label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              autoComplete="email"
+              style={styles.input}
+              onFocus={(e) => Object.assign(e.target.style, styles.inputFocus)}
+              onBlur={(e) => Object.assign(e.target.style, styles.input)}
+            />
+          </div>
+
+          <div style={styles.field}>
+            <label htmlFor="password" style={styles.label}>비밀번호</label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              minLength={6}
+              autoComplete="current-password"
+              style={styles.input}
+              onFocus={(e) => Object.assign(e.target.style, styles.inputFocus)}
+              onBlur={(e) => Object.assign(e.target.style, styles.input)}
+            />
+          </div>
+
+          {message && (
+            <div
+              style={{
+                ...styles.messageBox,
+                ...(message.type === 'success'
+                  ? styles.messageSuccess
+                  : message.type === 'warning'
+                  ? styles.messageWarning
+                  : styles.messageError),
+              }}
+            >
+              {message.text}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{ ...styles.submitBtn, ...(loading ? styles.submitBtnDisabled : {}) }}
+          >
+            {loading ? '처리 중...' : '로그인'}
+          </button>
+        </form>
+
+        <p style={styles.footerText}>
+          아직 회원이 아니신가요?{' '}
+          <Link href="/signup" style={styles.link}>회원가입</Link>
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export default function LoginPage() {
-  const configured = supabaseEnv();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const env = supabaseEnv();
-    if (!env) {
-      setMessage('NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY 를 설정하세요.');
-      return;
-    }
-    setLoading(true);
-    setMessage(null);
-    const supabase = createBrowserClient(env.url, env.anon);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    setLoading(false);
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-    window.location.href = '/dashboard';
-  }
-
   return (
-    <main style={{ maxWidth: 360, margin: '48px auto', padding: 16 }}>
-      <h1 style={{ fontSize: '1.25rem' }}>병원 로그인</h1>
-      <p style={{ fontSize: '0.875rem', color: '#555', lineHeight: 1.5 }}>
-        Supabase 이메일·비밀번호 로그인입니다. (DDx와 같은 프로젝트면 동일 계정으로 테스트 가능)
-      </p>
-      {!configured ? (
-        <p role="status" style={{ color: '#856404', fontSize: '0.875rem', marginTop: 12 }}>
-          빌드·실행 환경에 Supabase 공개 환경변수가 없습니다. Vercel 또는 <code>.env.local</code>을 확인하세요.
-        </p>
-      ) : null}
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, marginTop: 20 }}>
-        <label style={{ display: 'grid', gap: 4 }}>
-          <span style={{ fontSize: '0.8rem' }}>이메일</span>
-          <input
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(ev) => setEmail(ev.target.value)}
-            required
-            style={{ padding: '8px 10px' }}
-          />
-        </label>
-        <label style={{ display: 'grid', gap: 4 }}>
-          <span style={{ fontSize: '0.8rem' }}>비밀번호</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(ev) => setPassword(ev.target.value)}
-            required
-            style={{ padding: '8px 10px' }}
-          />
-        </label>
-        <button type="submit" disabled={loading} style={{ padding: '10px 12px', marginTop: 8 }}>
-          {loading ? '처리 중…' : '로그인'}
-        </button>
-      </form>
-      {message ? (
-        <p role="alert" style={{ color: '#b00020', marginTop: 16, fontSize: '0.875rem' }}>
-          {message}
-        </p>
-      ) : null}
-      <p style={{ marginTop: 24, fontSize: '0.8rem' }}>
-        <a href="/">← 처음으로</a>
-      </p>
-    </main>
+    <Suspense
+      fallback={
+        <div style={styles.container}>
+          <div style={styles.card}>
+            <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>로딩 중...</p>
+          </div>
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    display: 'flex',
+    minHeight: '100vh',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'var(--bg-subtle)',
+    padding: '16px',
+  },
+  card: {
+    width: '100%',
+    maxWidth: '400px',
+    background: 'var(--bg)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-lg)',
+    padding: '32px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+  },
+  logoArea: {
+    textAlign: 'center',
+    marginBottom: '28px',
+  },
+  logoIcon: {
+    fontSize: '28px',
+    display: 'block',
+    marginBottom: '8px',
+  },
+  title: {
+    margin: '0 0 4px',
+    fontSize: '20px',
+    fontWeight: 700,
+    color: 'var(--text)',
+    letterSpacing: '-0.02em',
+  },
+  subtitle: {
+    margin: 0,
+    fontSize: '13px',
+    color: 'var(--text-muted)',
+  },
+  form: {
+    display: 'grid',
+    gap: '16px',
+  },
+  field: {
+    display: 'grid',
+    gap: '6px',
+  },
+  label: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: 'var(--text-secondary)',
+  },
+  input: {
+    width: '100%',
+    padding: '9px 12px',
+    fontSize: '14px',
+    background: 'var(--bg)',
+    color: 'var(--text)',
+    border: '1px solid var(--border-strong)',
+    borderRadius: 'var(--radius)',
+    outline: 'none',
+    transition: 'border-color 0.15s',
+  },
+  inputFocus: {
+    width: '100%',
+    padding: '9px 12px',
+    fontSize: '14px',
+    background: 'var(--bg)',
+    color: 'var(--text)',
+    border: '1px solid var(--accent)',
+    borderRadius: 'var(--radius)',
+    outline: 'none',
+    boxShadow: '0 0 0 3px rgba(37,99,235,0.1)',
+  },
+  messageBox: {
+    padding: '10px 12px',
+    borderRadius: 'var(--radius)',
+    fontSize: '13px',
+    lineHeight: 1.5,
+  },
+  messageError: {
+    background: 'var(--danger-subtle)',
+    color: 'var(--danger)',
+    border: '1px solid var(--danger)',
+  },
+  messageWarning: {
+    background: '#fffbeb',
+    color: '#92400e',
+    border: '1px solid #fcd34d',
+  },
+  messageSuccess: {
+    background: 'var(--success-subtle)',
+    color: 'var(--success)',
+    border: '1px solid var(--success)',
+  },
+  submitBtn: {
+    width: '100%',
+    padding: '10px 16px',
+    fontSize: '14px',
+    fontWeight: 600,
+    background: 'var(--accent)',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: 'var(--radius)',
+    cursor: 'pointer',
+    transition: 'background 0.15s',
+    marginTop: '4px',
+  },
+  submitBtnDisabled: {
+    opacity: 0.55,
+    cursor: 'not-allowed',
+  },
+  footerText: {
+    marginTop: '20px',
+    textAlign: 'center',
+    fontSize: '13px',
+    color: 'var(--text-muted)',
+  },
+  link: {
+    color: 'var(--accent)',
+    fontWeight: 500,
+  },
+};

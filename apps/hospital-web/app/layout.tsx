@@ -1,14 +1,20 @@
 import type { ReactNode } from 'react';
+import { cookies } from 'next/headers';
+import './globals.css';
 
 export const metadata = {
-  title: 'Vet Solution · 병원',
-  description: '병원용 통합 UI — Supabase 로그인 · dashboard-api 연동 스모크',
+  title: 'VetSolution',
+  description: '동물병원 통합 관리 플랫폼',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const cookieStore = await cookies();
+  const theme = cookieStore.get('theme')?.value;
+  const isDark = theme === 'dark';
+
   return (
-    <html lang="ko">
-      <body style={{ fontFamily: 'system-ui, sans-serif', margin: 0, padding: 24 }}>{children}</body>
+    <html lang="ko" className={isDark ? 'dark' : ''}>
+      <body>{children}</body>
     </html>
   );
 }
