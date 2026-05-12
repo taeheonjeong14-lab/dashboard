@@ -5,7 +5,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 
 // 로컬 실행 전용 — collect-all.js / collect-all-batch.js 스폰 후 완료 대기
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 export type CollectStepResult = {
   index: number;
