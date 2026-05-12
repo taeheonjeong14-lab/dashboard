@@ -34,7 +34,6 @@ export function usePerformanceHospitalContext() {
 }
 
 const TABS = [
-  { suffix: '', label: 'HOME' },
   { suffix: 'hospital', label: '경영 통계' },
   { suffix: 'blog', label: '네이버 블로그 통계' },
   { suffix: 'place', label: '네이버 플레이스 통계' },
@@ -42,16 +41,11 @@ const TABS = [
 ] as const;
 
 function hospitalHref(id: string, suffix: string) {
-  if (!suffix) return `/admin/performance/${id}`;
-  return `/admin/performance/${id}/${suffix}`;
+  return `/admin/performance/${id}/${suffix || 'hospital'}`;
 }
 
 function tabActive(pathname: string, hospitalId: string, suffix: string): boolean {
-  const base = `/admin/performance/${hospitalId}`;
-  if (!suffix) {
-    return pathname === base || pathname === `${base}/`;
-  }
-  return pathname.startsWith(`${base}/${suffix}`);
+  return pathname.startsWith(`/admin/performance/${hospitalId}/${suffix}`);
 }
 
 function formatHospitalAddress(h: PerformanceHospitalRow): string {

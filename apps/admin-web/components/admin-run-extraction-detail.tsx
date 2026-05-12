@@ -416,7 +416,7 @@ export function AdminRunExtractionDetail({
       {!embedded ? (
         <header style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>추출 결과</h1>
-          <Link href="/admin/chart-data" className="adminLegacySecondaryBtn" style={{ textDecoration: 'none' }}>
+          <Link href="/admin/chart-data" className="adminLegacySecondaryBtn">
             기록 목록
           </Link>
           <button type="button" className="adminLegacySecondaryBtn" onClick={() => void fetchDetail({ silent: true })}>

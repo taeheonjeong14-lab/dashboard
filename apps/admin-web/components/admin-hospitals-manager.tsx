@@ -395,7 +395,7 @@ export default function AdminHospitalsManager() {
             </section>
           </details>
           <div className="adminLegacyModalActions">
-            <button type="submit" className="adminLegacyPrimaryBtn" disabled={loading} style={{ fontSize: 12, padding: '9px 16px' }}>
+            <button type="submit" className="adminLegacyPrimaryBtn" disabled={loading}>
               저장
             </button>
           </div>

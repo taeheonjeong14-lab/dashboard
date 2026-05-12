@@ -355,10 +355,10 @@ export function AdminHealthCheckupWorkspace({
     <>
       <div style={{ paddingBottom: 32 }}>
       <div style={{ marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-        <Link href="/admin/chart-data" className="adminLegacySmallBtn" style={{ textDecoration: 'none' }}>
+        <Link href="/admin/chart-data" className="adminLegacySmallBtn">
           차트 데이터(이력)
         </Link>
-        <Link href={`/admin/runs/${encodeURIComponent(runId)}`} className="adminLegacySmallBtn" style={{ textDecoration: 'none' }}>
+        <Link href={`/admin/runs/${encodeURIComponent(runId)}`} className="adminLegacySmallBtn">
           추출 상세
         </Link>
         <code style={{ fontSize: 11, color: '#64748b' }}>{runId}</code>

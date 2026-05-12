@@ -299,14 +299,13 @@ export default function AdminChartData() {
                 <Link
                   href={`/admin/runs/${encodeURIComponent(selected.id)}`}
                   className="adminLegacySmallBtn"
-                  style={{ textDecoration: 'none', marginLeft: 'auto' }}
+                  style={{ marginLeft: 'auto' }}
                 >
                   전체 페이지로
                 </Link>
                 <button
                   type="button"
-                  className="adminLegacySmallBtn"
-                  style={{ color: '#991b1b', border: `1px solid rgba(185, 28, 28, 0.35)` }}
+                  className="adminLegacyDangerBtn"
                   onClick={() => void deleteRun(selected)}
                   disabled={deletingId === selected.id}
                 >
