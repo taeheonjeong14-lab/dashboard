@@ -113,6 +113,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '유효하지 않은 hospital_id입니다.' }, { status: 400 });
   }
 
+  // 원격 Worker가 설정된 경우 프록시 (배포 환경)
+  const workerUrl = process.env.COLLECT_WORKER_URL?.trim();
+  if (workerUrl) {
+    const workerApiKey = process.env.COLLECT_WORKER_API_KEY?.trim();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (workerApiKey) headers['Authorization'] = `Bearer ${workerApiKey}`;
+    try {
+      const workerRes = await fetch(`${workerUrl.replace(/\/$/, '')}/collect/run`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ hospitalId }),
+        signal: AbortSignal.timeout(290_000),
+      });
+      const data = await workerRes.json() as CollectRunResult;
+      return NextResponse.json(data);
+    } catch (e) {
+      return NextResponse.json({
+        ok: false,
+        output: `[Worker 연결 실패] ${e instanceof Error ? e.message : String(e)}`,
+        steps: [],
+        upserts: [],
+      } satisfies CollectRunResult);
+    }
+  }
+
   // admin-web은 apps/admin-web/ 에서 실행되므로 두 단계 위가 프로젝트 루트
   const projectRoot = path.resolve(process.cwd(), '..', '..');
   const isBatch = !hospitalId;
