@@ -14,7 +14,7 @@ export async function GET(
   const { jobId } = await params;
   const supabase = createServiceRoleClient();
   const { data: job, error } = await supabase
-    .schema('core')
+    .schema('analytics')
     .from('collect_jobs')
     .select('id, status, output, steps, upserts, created_at, started_at, finished_at')
     .eq('id', jobId)

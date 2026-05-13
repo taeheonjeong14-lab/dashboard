@@ -1,0 +1,30 @@
+{
+  "name": "chart-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "진료 차트 / 건강검진 (vet-report 호환) HTTP API — ddx-api와 분리",
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 3003",
+    "build": "next build",
+    "start": "next start -p 3003"
+  },
+  "dependencies": {
+    "@fontsource/noto-sans-kr": "^5.2.9",
+    "@sparticuz/chromium": "^147.0.2",
+    "@supabase/supabase-js": "^2.39.0",
+    "next": "16.1.4",
+    "pdf-parse": "^1.1.4",
+    "pg": "^8.13.0",
+    "playwright-core": "^1.59.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/pg": "^8.11.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

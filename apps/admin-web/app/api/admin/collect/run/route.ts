@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   const supabase = createServiceRoleClient();
   const { data: job, error } = await supabase
-    .schema('core')
+    .schema('analytics')
     .from('collect_jobs')
     .insert({ hospital_id: hospitalId })
     .select('id')

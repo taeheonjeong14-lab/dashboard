@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200" role="img" aria-label="Cat cover image">
+  <rect width="900" height="1200" fill="#f8fafc"/>
+  <ellipse cx="450" cy="1000" rx="210" ry="60" fill="#e2e8f0"/>
+  <g fill="#334155">
+    <path d="M265 395c0-112 83-195 185-195s185 83 185 195v195c0 102-83 185-185 185S265 692 265 590V395z"/>
+    <path d="M310 215l88 72-120 30z"/>
+    <path d="M590 215l-88 72 120 30z"/>
+    <circle cx="390" cy="455" r="16" fill="#f8fafc"/>
+    <circle cx="510" cy="455" r="16" fill="#f8fafc"/>
+    <path d="M450 500l-26 26h52z" fill="#0f172a"/>
+    <path d="M330 540h130M440 560h-120M570 540H440M560 560H440" stroke="#0f172a" stroke-width="12" stroke-linecap="round"/>
+  </g>
+</svg>

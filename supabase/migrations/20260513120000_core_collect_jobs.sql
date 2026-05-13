@@ -1,5 +1,5 @@
 -- 수집 Job Queue — Worker가 폴링해서 실행하는 방식
-create table if not exists core.collect_jobs (
+create table if not exists analytics.collect_jobs (
   id          uuid        primary key default gen_random_uuid(),
   hospital_id text,                        -- null = 전체 병원 배치
   status      text        not null default 'pending', -- pending | running | done | failed
@@ -13,6 +13,6 @@ create table if not exists core.collect_jobs (
 );
 
 create index if not exists idx_collect_jobs_status_created
-  on core.collect_jobs (status, created_at);
+  on analytics.collect_jobs (status, created_at);
 
-grant select, insert, update, delete on table core.collect_jobs to service_role;
+grant select, insert, update, delete on table analytics.collect_jobs to service_role;

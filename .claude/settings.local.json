@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Projects\\\\dashboard-data\" -Force)",
+      "Bash(Select-Object Name, Mode)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Projects\\\\dashboard-data\\\\apps\\\\admin-web\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "Bash(layout\\\\.)",
+      "Bash(page\\\\.\")",
+      "Bash(npm install *)",
+      "PowerShell(netstat *)",
+      "Bash(npx kill-port *)",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Projects\\\\dashboard-data\\\\apps\\\\admin-web\\\\app\\\\api\\\\admin\\\\collect\\\\run\")",
+      "Bash(Out-Null)",
+      "Bash(Get-ChildItem *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Projects\\\\vet-report\" -Force | Select-Object Name, @{Name='Type';Expression={if\\($_.PSIsContainer\\){'Directory'}else{'File'}}} | Format-Table -AutoSize)",
+      "Bash(xargs grep -l \"parse_runs\\\\|result_\")",
+      "Bash(xargs ls -lh)",
+      "Bash(xargs grep -l \"create table.*parse_runs\\\\|create table.*documents\")",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(dir C:\\\\Projects\\\\dashboard-data\\\\apps *)",
+      "Bash(dir C:\\\\Projects\\\\dashboard-data\\\\apps\\\\hospital-web *)",
+      "Bash(dir C:\\\\Projects\\\\dashboard-data\\\\apps\\\\hospital-web\\\\app *)",
+      "Bash(dir C:\\\\Projects\\\\dashboard-data\\\\apps\\\\hospital-web\\\\app\\\\\\(app\\) *)",
+      "Bash(dir C:\\\\Projects\\\\dashboard-data\\\\apps\\\\hospital-web\\\\components *)",
+      "Bash(dir \"C:\\\\Projects\\\\dashboard-data\\\\apps\\\\hospital-web\\\\app\\\\\\(app\\)\\\\dashboard\")",
+      "Bash(dir \"C:\\\\Projects\\\\dashboard-data\\\\apps\\\\hospital-web\\\\app\\\\\\(app\\)\\\\ai-assist\")",
+      "Bash(dir \"C:\\\\Projects\\\\dashboard-data\\\\apps\\\\hospital-web\\\\app\\\\\\(app\\)\\\\health-report\")",
+      "Bash(dir C:\\\\Projects\\\\dashboard-data\\\\apps\\\\hospital-web\\\\components\\\\shell *)",
+      "Bash(npm run *)"
+    ]
+  }
+}
