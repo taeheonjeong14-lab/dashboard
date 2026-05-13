@@ -28,6 +28,10 @@ const supabase = createClient(
   { db: { schema: "analytics" } }
 );
 
+function mmdd(ymd) {
+  return ymd ? ymd.slice(5) : "";
+}
+
 function parseCollectOutput(output) {
   const steps = [];
   const upserts = [];
@@ -43,20 +47,43 @@ function parseCollectOutput(output) {
     });
   }
 
+  // 블로그 일별 지표
+  const blogRange = /블로그 일별 수집 구간 \(KST\):\s*(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/.exec(output);
   const blogM = /blog_daily_metrics\s+업서트\s+완료:\s*(\d+)건/.exec(output);
-  if (blogM) upserts.push({ label: "블로그 일별 지표", count: parseInt(blogM[1], 10) });
+  if (blogM) {
+    upserts.push({ label: "블로그 일별 지표", count: parseInt(blogM[1], 10), dateRange: blogRange ? `${mmdd(blogRange[1])} ~ ${mmdd(blogRange[2])}` : null });
+  } else if (/blog_daily_metrics 이미 최신입니다/.test(output)) {
+    upserts.push({ label: "블로그 일별 지표", count: 0, skipped: true });
+  }
 
+  // 스마트플레이스 유입
+  const spRange = /스마트플레이스 유입 수집 구간 \(KST\):\s*(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/.exec(output);
   const spM = /smartplace_daily_metrics\s+업서트\s+완료:\s*(\d+)건/.exec(output);
-  if (spM) upserts.push({ label: "스마트플레이스 유입", count: parseInt(spM[1], 10) });
+  if (spM) {
+    upserts.push({ label: "스마트플레이스 유입", count: parseInt(spM[1], 10), dateRange: spRange ? `${mmdd(spRange[1])} ~ ${mmdd(spRange[2])}` : null });
+  } else if (/smartplace_daily_metrics 이미 최신입니다/.test(output)) {
+    upserts.push({ label: "스마트플레이스 유입", count: 0, skipped: true });
+  }
 
-  const rankM = /Supabase\s+업서트\s+완료:\s*(\d+)건/.exec(output);
-  if (rankM) upserts.push({ label: "블로그 키워드 순위", count: parseInt(rankM[1], 10) });
+  // 블로그 키워드 순위 (여러 건 합산)
+  const rankRe = /Supabase\s+업서트\s+완료:\s*(\d+)건\s+\(metric_date=(\d{4}-\d{2}-\d{2})\)/g;
+  let rankTotal = 0, rankDate = null;
+  while ((m = rankRe.exec(output)) !== null) { rankTotal += parseInt(m[1], 10); rankDate = m[2]; }
+  if (rankTotal > 0) upserts.push({ label: "블로그 키워드 순위", count: rankTotal, dateRange: rankDate ? mmdd(rankDate) : null });
 
-  const placeRankM = /Supabase\s+플레이스\s+업서트\s+완료:\s*(\d+)건/.exec(output);
-  if (placeRankM) upserts.push({ label: "플레이스 키워드 순위", count: parseInt(placeRankM[1], 10) });
+  // 플레이스 키워드 순위 (여러 건 합산)
+  const placeRankRe = /Supabase\s+플레이스\s+업서트\s+완료:\s*(\d+)건\s+\(metric_date=(\d{4}-\d{2}-\d{2})\)/g;
+  let placeTotal = 0, placeDate = null;
+  while ((m = placeRankRe.exec(output)) !== null) { placeTotal += parseInt(m[1], 10); placeDate = m[2]; }
+  if (placeTotal > 0) upserts.push({ label: "플레이스 키워드 순위", count: placeTotal, dateRange: placeDate ? mmdd(placeDate) : null });
 
+  // SearchAd
   const searchadM = /SearchAd\s+전체\s+처리\s+완료:\s*total_upsert_rows=(\d+)/.exec(output);
-  if (searchadM) upserts.push({ label: "SearchAd 광고 성과", count: parseInt(searchadM[1], 10) });
+  if (searchadM) {
+    upserts.push({ label: "SearchAd 광고 성과", count: parseInt(searchadM[1], 10) });
+  } else if (/SearchAd 이미 최신/.test(output)) {
+    upserts.push({ label: "SearchAd 광고 성과", count: 0, skipped: true });
+  }
 
   return { steps, upserts };
 }

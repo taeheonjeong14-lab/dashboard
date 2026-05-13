@@ -14,7 +14,7 @@ const MAX_PDF_BYTES = 30 * 1024 * 1024;
 type UploadSection = 'pdf' | 'stats' | 'collect';
 
 type CollectStepResult = { index: number; total: number; name: string; durationSec: number };
-type CollectUpsertItem = { label: string; count: number };
+type CollectUpsertItem = { label: string; count: number; dateRange?: string | null; skipped?: boolean };
 type CollectJob = {
   id: string;
   status: 'pending' | 'running' | 'done' | 'failed';
@@ -408,23 +408,38 @@ export default function AdminDataUpload() {
                   <div style={{ display: 'grid', gap: 6 }}>
                     {collectHistory.map((h) => {
                       const hospitalName = hospitals.find((x) => x.id === h.hospital_id)?.name_ko ?? h.hospital_id ?? '전체 병원';
-                      const totalUpserts = (h.upserts ?? []).reduce((s, u) => s + u.count, 0);
+                      const upserts = h.upserts ?? [];
                       return (
                         <div
                           key={h.id}
-                          style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center', padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12 }}
+                          style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12 }}
                         >
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <span style={{ fontWeight: 600, color: '#0f172a' }}>{hospitalName}</span>
-                            <span style={{ color: '#64748b' }}>
-                              {formatKst(h.created_at)}
-                              {h.finished_at && ` · ${durationSec(h.started_at, h.finished_at)}`}
-                              {h.status === 'done' && totalUpserts > 0 && ` · ${totalUpserts.toLocaleString()}건 수집`}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: upserts.length > 0 ? 8 : 0 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <span style={{ fontWeight: 600, color: '#0f172a' }}>{hospitalName}</span>
+                              <span style={{ color: '#64748b' }}>
+                                {formatKst(h.created_at)}
+                                {h.finished_at && ` · ${durationSec(h.started_at, h.finished_at)}`}
+                              </span>
+                            </div>
+                            <span style={{ fontWeight: 700, color: STATUS_COLOR[h.status], whiteSpace: 'nowrap', marginLeft: 8 }}>
+                              {STATUS_LABEL[h.status]}
                             </span>
                           </div>
-                          <span style={{ fontWeight: 700, color: STATUS_COLOR[h.status], whiteSpace: 'nowrap' }}>
-                            {STATUS_LABEL[h.status]}
-                          </span>
+                          {upserts.length > 0 && (
+                            <div style={{ display: 'grid', gap: 3, borderTop: '1px solid #e2e8f0', paddingTop: 7 }}>
+                              {upserts.map((u) => (
+                                <div key={u.label} style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                                  <span>{u.label}</span>
+                                  <span style={{ fontWeight: 600, color: u.skipped ? '#94a3b8' : '#1d4ed8' }}>
+                                    {u.skipped
+                                      ? '이미 최신'
+                                      : `${u.count.toLocaleString()}건${u.dateRange ? ` (${u.dateRange})` : ''}`}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
