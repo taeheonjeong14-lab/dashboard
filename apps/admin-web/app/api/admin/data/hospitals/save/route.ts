@@ -132,6 +132,13 @@ export async function POST(request: Request) {
       throw new Error('hospital_id를 확인할 수 없습니다.');
     }
 
+    const { error: blogDeactivateErr } = await supabase
+      .schema('analytics')
+      .from('analytics_blog_keyword_targets')
+      .update({ is_active: false })
+      .eq('hospital_id', resolvedHospitalId);
+    if (blogDeactivateErr) throw blogDeactivateErr;
+
     const blogKeywords = parseKeywordLines(hospitalForm.blog_keywords_text || '');
     for (const item of blogKeywords) {
       const { error: btErr } = await supabase
@@ -149,6 +156,13 @@ export async function POST(request: Request) {
         );
       if (btErr) throw btErr;
     }
+
+    const { error: placeDeactivateErr } = await supabase
+      .schema('analytics')
+      .from('analytics_place_keyword_targets')
+      .update({ is_active: false })
+      .eq('hospital_id', resolvedHospitalId);
+    if (placeDeactivateErr) throw placeDeactivateErr;
 
     const placeKeywords = parseKeywordLines(hospitalForm.place_keywords_text || '');
     for (const item of placeKeywords) {

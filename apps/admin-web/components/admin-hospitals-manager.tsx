@@ -33,8 +33,8 @@ const EMPTY_FORM = {
   naver_blog_id: '',
   smartplace_stat_url: '',
   debug_port: '',
-  blog_keywords_text: '',
-  place_keywords_text: '',
+  blog_keywords: [] as string[],
+  place_keywords: [] as string[],
   searchad_customer_id: '',
   searchad_api_license: '',
   searchad_secret_key_encrypted: '',
@@ -67,6 +67,37 @@ function LabeledField({ label, children }: { label: string; children: ReactNode 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
       <span style={fieldLabelStyle}>{label}</span>
       {children}
+    </div>
+  );
+}
+
+function KeywordList({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {value.map((kw, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input
+            value={kw}
+            onChange={(e) => { const next = [...value]; next[i] = e.target.value; onChange(next); }}
+            style={{ ...fieldStyle, flex: 1 }}
+            placeholder="키워드 입력"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((_, j) => j !== i))}
+            style={{ flexShrink: 0, padding: '2px 8px', fontSize: 11, color: '#ef4444', background: 'transparent', border: '1px solid #fca5a5', borderRadius: 4, cursor: 'pointer' }}
+          >
+            삭제
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...value, ''])}
+        style={{ alignSelf: 'flex-start', marginTop: 2, padding: '3px 10px', fontSize: 11, color: '#334155', background: 'transparent', border: '1px solid rgba(15,23,42,0.2)', borderRadius: 4, cursor: 'pointer' }}
+      >
+        + 행 추가
+      </button>
     </div>
   );
 }
@@ -117,7 +148,15 @@ export default function AdminHospitalsManager() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '상세 조회 실패');
       setSelectedId(id);
-      setForm({ ...EMPTY_FORM, ...(data.form || {}) });
+      const apiForm = (data.form || {}) as Record<string, unknown>;
+      const toKeywordArray = (text: unknown) =>
+        String(text || '').split('\n').map((s) => s.trim()).filter(Boolean);
+      setForm({
+        ...EMPTY_FORM,
+        ...(apiForm as Partial<typeof EMPTY_FORM>),
+        blog_keywords: toKeywordArray(apiForm.blog_keywords_text),
+        place_keywords: toKeywordArray(apiForm.place_keywords_text),
+      });
     } catch (e) {
       setMessage(`상세 조회 실패: ${formatSupabaseError(e)}`);
     } finally {
@@ -138,7 +177,14 @@ export default function AdminHospitalsManager() {
       const res = await fetch('/api/admin/data/hospitals/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ editingId: selectedId, hospitalForm: form }),
+        body: JSON.stringify({
+          editingId: selectedId,
+          hospitalForm: {
+            ...form,
+            blog_keywords_text: form.blog_keywords.filter(Boolean).join('\n'),
+            place_keywords_text: form.place_keywords.filter(Boolean).join('\n'),
+          },
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '저장 실패');
@@ -386,11 +432,11 @@ export default function AdminHospitalsManager() {
               키워드 모니터링
             </summary>
             <section style={sectionStyle}>
-              <LabeledField label="블로그 키워드 (한 줄에 하나)">
-                <textarea rows={4} value={form.blog_keywords_text} onChange={(e) => setForm((f) => ({ ...f, blog_keywords_text: e.target.value }))} style={fieldStyle} />
+              <LabeledField label="블로그 키워드">
+                <KeywordList value={form.blog_keywords} onChange={(v) => setForm((f) => ({ ...f, blog_keywords: v }))} />
               </LabeledField>
-              <LabeledField label="플레이스 키워드 (한 줄에 하나)">
-                <textarea rows={4} value={form.place_keywords_text} onChange={(e) => setForm((f) => ({ ...f, place_keywords_text: e.target.value }))} style={fieldStyle} />
+              <LabeledField label="플레이스 키워드">
+                <KeywordList value={form.place_keywords} onChange={(v) => setForm((f) => ({ ...f, place_keywords: v }))} />
               </LabeledField>
             </section>
           </details>
