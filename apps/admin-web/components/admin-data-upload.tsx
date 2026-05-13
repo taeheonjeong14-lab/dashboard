@@ -22,6 +22,44 @@ type CollectJob = {
   steps: CollectStepResult[] | null;
   upserts: CollectUpsertItem[] | null;
 };
+type CollectHistoryItem = {
+  id: string;
+  hospital_id: string | null;
+  status: 'pending' | 'running' | 'done' | 'failed';
+  upserts: CollectUpsertItem[] | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+function formatKst(iso: string): string {
+  return new Date(iso).toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function durationSec(start: string | null, end: string | null): string {
+  if (!start || !end) return '-';
+  const sec = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000);
+  return sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`;
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: '대기 중',
+  running: '수집 중',
+  done: '완료',
+  failed: '실패',
+};
+const STATUS_COLOR: Record<string, string> = {
+  pending: '#64748b',
+  running: '#1d4ed8',
+  done: '#15803d',
+  failed: '#991b1b',
+};
 
 export default function AdminDataUpload() {
   const searchParams = useSearchParams();
@@ -43,6 +81,8 @@ export default function AdminDataUpload() {
   const [collectSubmitting, setCollectSubmitting] = useState(false);
   const [collectJob, setCollectJob] = useState<CollectJob | null>(null);
   const [collectError, setCollectError] = useState<string | null>(null);
+  const [collectHistory, setCollectHistory] = useState<CollectHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,6 +172,22 @@ export default function AdminDataUpload() {
     }
   }
 
+  async function loadHistory() {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch('/api/admin/collect/jobs', { credentials: 'include' });
+      if (!res.ok) return;
+      const data = (await res.json()) as { jobs: CollectHistoryItem[] };
+      setCollectHistory(data.jobs ?? []);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (section === 'collect') void loadHistory();
+  }, [section]);
+
   async function runCollect(hospitalId?: string) {
     setCollectSubmitting(true);
     setCollectJob(null);
@@ -164,6 +220,7 @@ export default function AdminDataUpload() {
         if (!res.ok) return;
         const job = (await res.json()) as CollectJob;
         setCollectJob(job);
+        if (job.status === 'done' || job.status === 'failed') void loadHistory();
       } catch {
         // 폴링 오류는 무시하고 계속 시도
       }
@@ -331,6 +388,49 @@ export default function AdminDataUpload() {
                   </details>
                 </>
               )}
+
+              {/* 수집 이력 */}
+              <div className="adminLegacyBlockBleed" style={{ marginTop: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#334155' }}>최근 수집 이력</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadHistory()}
+                    disabled={historyLoading}
+                    style={{ fontSize: 12, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    {historyLoading ? '불러오는 중…' : '새로고침'}
+                  </button>
+                </div>
+                {collectHistory.length === 0 ? (
+                  <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>수집 이력이 없습니다.</p>
+                ) : (
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {collectHistory.map((h) => {
+                      const hospitalName = hospitals.find((x) => x.id === h.hospital_id)?.name_ko ?? h.hospital_id ?? '전체 병원';
+                      const totalUpserts = (h.upserts ?? []).reduce((s, u) => s + u.count, 0);
+                      return (
+                        <div
+                          key={h.id}
+                          style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center', padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12 }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontWeight: 600, color: '#0f172a' }}>{hospitalName}</span>
+                            <span style={{ color: '#64748b' }}>
+                              {formatKst(h.created_at)}
+                              {h.finished_at && ` · ${durationSec(h.started_at, h.finished_at)}`}
+                              {h.status === 'done' && totalUpserts > 0 && ` · ${totalUpserts.toLocaleString()}건 수집`}
+                            </span>
+                          </div>
+                          <span style={{ fontWeight: 700, color: STATUS_COLOR[h.status], whiteSpace: 'nowrap' }}>
+                            {STATUS_LABEL[h.status]}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </>
           ) : section === 'pdf' ? (
             <>
