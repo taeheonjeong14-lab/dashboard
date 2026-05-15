@@ -7,7 +7,7 @@
  * - start > end 이면 empty (이미 최신)
  */
 
-const INITIAL_BACKFILL_DAYS = 30;
+const INITIAL_BACKFILL_DAYS = 90;
 
 function getKstYmdForInstant(ms = Date.now()) {
   return new Date(ms).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });

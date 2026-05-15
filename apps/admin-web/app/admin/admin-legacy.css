@@ -644,6 +644,30 @@ details > summary::-webkit-details-marker { display: none; }
   transform: translateY(-52%) rotate(90deg);
 }
 
+/* ── 건강검진 워크스페이스 필드 ───────────────── */
+.adminHealthWorkspace input,
+.adminHealthWorkspace textarea,
+.adminHealthWorkspace select {
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 7px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+  width: 100%;
+  background: #fff;
+  color: #0f172a;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.adminHealthWorkspace input:focus,
+.adminHealthWorkspace textarea:focus,
+.adminHealthWorkspace select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
 /* ── 반응형 ───────────────────────────────────── */
 @media (max-width: 960px) {
   .adminLegacyPage {

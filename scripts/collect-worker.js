@@ -47,6 +47,23 @@ function parseCollectOutput(output) {
     });
   }
 
+  const failRe = /✗\s+(\d+)\/(\d+)\s+실패\s+\(([0-9.]+)s\)\s+[—\-]\s+(.+)/g;
+  while ((m = failRe.exec(output)) !== null) {
+    const raw = m[4].trim();
+    const colonIdx = raw.indexOf(":");
+    const name = colonIdx > 0 ? raw.slice(0, colonIdx).trim() : raw;
+    const error = colonIdx > 0 ? raw.slice(colonIdx + 1).trim() : "";
+    steps.push({
+      index: parseInt(m[1], 10),
+      total: parseInt(m[2], 10),
+      durationSec: parseFloat(m[3]),
+      name,
+      error,
+    });
+  }
+
+  steps.sort((a, b) => a.index - b.index);
+
   // 블로그 일별 지표
   const blogRange = /블로그 일별 수집 구간 \(KST\):\s*(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/.exec(output);
   const blogM = /blog_daily_metrics\s+업서트\s+완료:\s*(\d+)건/.exec(output);
@@ -88,9 +105,10 @@ function parseCollectOutput(output) {
   return { steps, upserts };
 }
 
-function spawnAndCapture(scriptPath, args) {
+function spawnAndCapture(scriptPath, args, onBatchHospitalDone) {
   return new Promise((resolve) => {
     const chunks = [];
+    let lineBuffer = "";
     const env = {
       ...process.env,
       COLLECT_ALL_NO_FILE_LOG: "1",
@@ -103,8 +121,24 @@ function spawnAndCapture(scriptPath, args) {
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });
+
+    function handleLine(line) {
+      if (onBatchHospitalDone && line.startsWith("[BATCH_HOSPITAL_DONE] ")) {
+        try {
+          const marker = JSON.parse(line.slice("[BATCH_HOSPITAL_DONE] ".length));
+          onBatchHospitalDone(chunks.join(""), marker);
+        } catch { /* 파싱 실패는 무시 */ }
+      }
+    }
+
     child.stdout?.setEncoding("utf8");
-    child.stdout?.on("data", (c) => chunks.push(c));
+    child.stdout?.on("data", (chunk) => {
+      chunks.push(chunk);
+      lineBuffer += chunk;
+      const lines = lineBuffer.split("\n");
+      lineBuffer = lines.pop() ?? "";
+      for (const line of lines) handleLine(line);
+    });
     child.stderr?.setEncoding("utf8");
     child.stderr?.on("data", (c) => chunks.push(c));
     child.on("error", (err) => {
@@ -112,6 +146,7 @@ function spawnAndCapture(scriptPath, args) {
       resolve({ code: 1, output: chunks.join("") });
     });
     child.on("close", (code) => {
+      if (lineBuffer) handleLine(lineBuffer);
       resolve({ code: code ?? 1, output: chunks.join("") });
     });
   });
@@ -147,7 +182,20 @@ async function pollAndRun() {
   const scriptPath = path.join(ROOT_DIR, "scripts", scriptName);
   const args = isBatch ? [] : [job.hospital_id];
 
-  const { code, output } = await spawnAndCapture(scriptPath, args);
+  const onBatchHospitalDone = isBatch
+    ? (accOutput, marker) => {
+        console.log(`[collect-worker] 병원 완료 (${marker.index}/${marker.total}): ${marker.hospitalId}`);
+        const { steps, upserts } = parseCollectOutput(accOutput);
+        supabase
+          .from("collect_jobs")
+          .update({ steps, upserts, updated_at: new Date().toISOString() })
+          .eq("id", job.id)
+          .then(() => {})
+          .catch(() => {});
+      }
+    : undefined;
+
+  const { code, output } = await spawnAndCapture(scriptPath, args, onBatchHospitalDone);
   const { steps, upserts } = parseCollectOutput(output);
   const status = code === 0 ? "done" : "failed";
 

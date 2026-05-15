@@ -13,7 +13,7 @@ const MAX_PDF_BYTES = 30 * 1024 * 1024;
 
 type UploadSection = 'pdf' | 'stats' | 'collect';
 
-type CollectStepResult = { index: number; total: number; name: string; durationSec: number };
+type CollectStepResult = { index: number; total: number; name: string; durationSec: number; error?: string };
 type CollectUpsertItem = { label: string; count: number; dateRange?: string | null; skipped?: boolean };
 type CollectJob = {
   id: string;
@@ -26,6 +26,7 @@ type CollectHistoryItem = {
   id: string;
   hospital_id: string | null;
   status: 'pending' | 'running' | 'done' | 'failed';
+  steps: CollectStepResult[] | null;
   upserts: CollectUpsertItem[] | null;
   created_at: string;
   started_at: string | null;
@@ -214,13 +215,20 @@ export default function AdminDataUpload() {
 
   useEffect(() => {
     if (!collectJob || collectJob.status === 'done' || collectJob.status === 'failed') return;
+    let tick = 0;
     const timer = setInterval(async () => {
       try {
         const res = await fetch(`/api/admin/collect/status/${collectJob.id}`, { credentials: 'include' });
         if (!res.ok) return;
         const job = (await res.json()) as CollectJob;
         setCollectJob(job);
-        if (job.status === 'done' || job.status === 'failed') void loadHistory();
+        if (job.status === 'done' || job.status === 'failed') {
+          void loadHistory();
+        } else {
+          tick += 1;
+          // 30초(6틱)마다 이력 목록도 갱신해서 중간 완료된 병원이 보이게
+          if (tick % 6 === 0) void loadHistory();
+        }
       } catch {
         // 폴링 오류는 무시하고 계속 시도
       }
@@ -368,9 +376,17 @@ export default function AdminDataUpload() {
                       <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#334155' }}>실행 단계</p>
                       <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 4 }}>
                         {collectJob.steps.map((s) => (
-                          <li key={`${s.index}-${s.name}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, color: '#475569', padding: '4px 0', borderBottom: '1px solid rgba(15,23,42,0.05)' }}>
-                            <span><span style={{ color: '#15803d', marginRight: 6 }}>✓</span>{s.index}. {s.name}</span>
-                            <span style={{ color: '#94a3b8', fontSize: 12, flexShrink: 0, marginLeft: 8 }}>{s.durationSec.toFixed(1)}s</span>
+                          <li key={`${s.index}-${s.name}`} style={{ fontSize: 13, padding: '4px 0', borderBottom: '1px solid rgba(15,23,42,0.05)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ color: s.error ? '#991b1b' : '#475569' }}>
+                                <span style={{ color: s.error ? '#b91c1c' : '#15803d', marginRight: 6 }}>{s.error ? '✗' : '✓'}</span>
+                                {s.index}. {s.name}
+                              </span>
+                              <span style={{ color: '#94a3b8', fontSize: 12, flexShrink: 0, marginLeft: 8 }}>{s.durationSec.toFixed(1)}s</span>
+                            </div>
+                            {s.error && (
+                              <p style={{ margin: '3px 0 0 18px', fontSize: 12, color: '#b91c1c', lineHeight: 1.4 }}>{s.error}</p>
+                            )}
                           </li>
                         ))}
                       </ol>
@@ -409,12 +425,14 @@ export default function AdminDataUpload() {
                     {collectHistory.map((h) => {
                       const hospitalName = hospitals.find((x) => x.id === h.hospital_id)?.name_ko ?? h.hospital_id ?? '전체 병원';
                       const upserts = h.upserts ?? [];
+                      const failedSteps = (h.steps ?? []).filter((s) => s.error);
+                      const hasDetails = upserts.length > 0 || failedSteps.length > 0;
                       return (
                         <div
                           key={h.id}
-                          style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12 }}
+                          style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${failedSteps.length > 0 ? 'rgba(185,28,28,0.25)' : '#e2e8f0'}`, borderRadius: 6, fontSize: 12 }}
                         >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: upserts.length > 0 ? 8 : 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: hasDetails ? 8 : 0 }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                               <span style={{ fontWeight: 600, color: '#0f172a' }}>{hospitalName}</span>
                               <span style={{ color: '#64748b' }}>
@@ -426,6 +444,16 @@ export default function AdminDataUpload() {
                               {STATUS_LABEL[h.status]}
                             </span>
                           </div>
+                          {failedSteps.length > 0 && (
+                            <div style={{ display: 'grid', gap: 4, borderTop: '1px solid rgba(185,28,28,0.2)', paddingTop: 7, marginBottom: upserts.length > 0 ? 8 : 0 }}>
+                              {failedSteps.map((s) => (
+                                <div key={`${s.index}-${s.name}`} style={{ color: '#991b1b' }}>
+                                  <span style={{ fontWeight: 600 }}>✗ {s.index}. {s.name}</span>
+                                  {s.error && <span style={{ color: '#b91c1c', marginLeft: 6 }}>— {s.error}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           {upserts.length > 0 && (
                             <div style={{ display: 'grid', gap: 3, borderTop: '1px solid #e2e8f0', paddingTop: 7 }}>
                               {upserts.map((u) => (

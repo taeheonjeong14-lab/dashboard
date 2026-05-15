@@ -81,9 +81,13 @@ type ContentItem = {
 
 export function AdminHealthCheckupWorkspace({
   runId,
+  hospitalName,
+  patientName,
   onRunsChanged,
 }: {
   runId: string;
+  hospitalName?: string;
+  patientName?: string;
   onRunsChanged?: () => void;
 }) {
   const [items, setItems] = useState<ContentItem[]>([]);
@@ -91,8 +95,6 @@ export function AdminHealthCheckupWorkspace({
   const [loading, setLoading] = useState(true);
 
   const [draft, setDraft] = useState<HealthCheckupGeneratedContent>(() => emptyHealthCheckupPayload());
-  /** 키가 있으면 해당 시트는 원시 JSON 모드(스키마 불일치 시 자동 진입). */
-  const [systemsJsonRaw, setSystemsJsonRaw] = useState<Partial<Record<SystemKey, string>>>({});
 
   const [checkupDate, setCheckupDate] = useState('');
   const [veterinarian, setVeterinarian] = useState('');
@@ -105,7 +107,6 @@ export function AdminHealthCheckupWorkspace({
   const [genError, setGenError] = useState<string | null>(null);
 
   const [pdfBusy, setPdfBusy] = useState(false);
-  const [shareBusy, setShareBusy] = useState(false);
   const [sharePanel, setSharePanel] = useState<{ shareUrl: string; expiresAt: string } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -125,23 +126,22 @@ export function AdminHealthCheckupWorkspace({
       setItems(list);
       const hc = list.find((i) => i.contentType === 'health_checkup');
       if (hc) {
-        const merged = mergeHealthPayloadFromStorage(hc.payload);
-        setDraft(merged);
-        const raw: Partial<Record<SystemKey, string>> = {};
-        for (const k of SYSTEM_KEYS) {
-          const arr = Array.isArray(merged[k]) ? (merged[k] as unknown[]) : [];
-          if (arr.length > 0 && parseHealthSystemsBlocksFromUnknown(arr) === null) {
-            try {
-              raw[k] = JSON.stringify(arr, null, 2);
-            } catch {
-              raw[k] = '[]';
-            }
-          }
+        setDraft(mergeHealthPayloadFromStorage(hc.payload));
+        try {
+          const shareRes = await fetch('/api/admin/health-report/review-share', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ runId }),
+          });
+          const shareData = (await shareRes.json()) as { shareUrl?: string; expiresAt?: string };
+          if (shareData.shareUrl) setSharePanel({ shareUrl: shareData.shareUrl, expiresAt: shareData.expiresAt ?? '' });
+        } catch {
+          /* 링크 발급 실패는 조용히 무시 */
         }
-        setSystemsJsonRaw(raw);
       } else {
         setDraft(emptyHealthCheckupPayload());
-        setSystemsJsonRaw({});
+        setSharePanel(null);
       }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : '불러오기 실패');
@@ -177,38 +177,13 @@ export function AdminHealthCheckupWorkspace({
     setDraft((d) => ({ ...d, [key]: joinTimelineCardText(title, body) }));
   }
 
-  function buildPayloadForSave(): HealthCheckupGeneratedContent | null {
-    const next: HealthCheckupGeneratedContent = { ...draft };
-    for (const k of SYSTEM_KEYS) {
-      const raw = systemsJsonRaw[k];
-      if (raw !== undefined) {
-        try {
-          const parsed = JSON.parse(raw) as unknown;
-          if (!Array.isArray(parsed)) {
-            setSaveError(`${k}: JSON은 배열이어야 합니다.`);
-            return null;
-          }
-          if (parsed.length > 0 && parseHealthSystemsBlocksFromUnknown(parsed) === null) {
-            setSaveError(`${k}: 블록 스키마가 올바르지 않습니다. vet-report HealthSystemsReportBlock[] 형식을 확인하세요.`);
-            return null;
-          }
-          (next as Record<string, unknown>)[k] = parsed;
-        } catch {
-          setSaveError(`${k} JSON 형식이 올바르지 않습니다.`);
-          return null;
-        }
-      } else {
-        const v = draft[k];
-        (next as Record<string, unknown>)[k] = Array.isArray(v) ? v : [];
-      }
-    }
+  function buildPayloadForSave(): HealthCheckupGeneratedContent {
     setSaveError(null);
-    return next;
+    return draft;
   }
 
   async function saveReview() {
     const payload = buildPayloadForSave();
-    if (!payload) return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -327,42 +302,79 @@ export function AdminHealthCheckupWorkspace({
     }
   }, [runId]);
 
-  const issueExternalShareLink = useCallback(async () => {
-    setShareBusy(true);
-    try {
-      const res = await fetch('/api/admin/health-report/review-share', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ runId }),
-      });
-      const data = (await res.json()) as { ok?: boolean; shareUrl?: string; expiresAt?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? '링크 발급 실패');
-      if (!data.shareUrl) throw new Error('shareUrl 없음');
-      setSharePanel({ shareUrl: data.shareUrl, expiresAt: data.expiresAt ?? '' });
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : '링크 발급 실패');
-    } finally {
-      setShareBusy(false);
-    }
-  }, [runId]);
 
   if (loading && items.length === 0 && !loadError) {
     return <p style={{ fontSize: 14, color: '#64748b' }}>불러오는 중…</p>;
   }
 
+  const caseInfoParts = [
+    hospitalName?.trim(),
+    (draft.coverPatientName?.trim() || patientName?.trim()),
+    draft.coverCheckupDate?.trim() ? new Date(draft.coverCheckupDate).toLocaleDateString('ko-KR') : undefined,
+  ].filter(Boolean);
+
   return (
     <>
-      <div style={{ paddingBottom: 32 }}>
-      <div style={{ marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+      <div className="adminHealthWorkspace" style={{ paddingBottom: 32 }}>
+      {caseInfoParts.length > 0 ? (
+        <div style={{ marginBottom: 10, fontSize: 16, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+          {caseInfoParts.join(' · ')}
+        </div>
+      ) : null}
+
+      <div style={{ marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
         <Link href="/admin/chart-data" className="adminLegacySmallBtn">
           차트 데이터(이력)
         </Link>
-        <Link href={`/admin/runs/${encodeURIComponent(runId)}`} className="adminLegacySmallBtn">
-          추출 상세
-        </Link>
-        <code style={{ fontSize: 11, color: '#64748b' }}>{runId}</code>
+        {hasContent ? (
+          <>
+            <button type="button" className="adminLegacySecondaryBtn" disabled={saving} onClick={() => void saveReview()}>
+              {saving ? '저장 중…' : '검토 내용 저장'}
+            </button>
+            <button type="button" className="adminLegacySmallBtn" disabled={generating} onClick={() => void generateContent()}>
+              {generating ? '재생성 중…' : '다시 생성'}
+            </button>
+            <button
+              type="button"
+              className="adminLegacySmallBtn"
+              onClick={() => setPreviewOpen(true)}
+              title="chart-api 미리보기 JSON을 admin에서 모달로 표시합니다(편집 중이면 현재 초안 전달)."
+            >
+              미리보기
+            </button>
+            <button
+              type="button"
+              className="adminLegacySmallBtn"
+              disabled={pdfBusy}
+              title="응답을 모두 받을 때까지 버튼이 비활성화됩니다. Playwright PDF는 수 분 걸릴 수 있습니다."
+              onClick={() => void downloadPdf()}
+            >
+              {pdfBusy ? 'PDF 생성 중…' : 'PDF 다운로드'}
+            </button>
+          </>
+        ) : null}
+        <code style={{ fontSize: 11, color: '#94a3b8' }}>{runId}</code>
       </div>
+
+      {sharePanel ? (
+        <div style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6 }}>
+          <span style={{ fontSize: 12, color: '#166534', fontWeight: 600, flexShrink: 0 }}>외부 검토 링크</span>
+          <input readOnly value={sharePanel.shareUrl} style={{ flex: '1 1 200px', minWidth: 0, fontSize: 12 }} />
+          <button
+            type="button"
+            className="adminLegacySmallBtn"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(sharePanel.shareUrl);
+              } catch {
+                window.alert('복사에 실패했습니다. 입력란에서 직접 복사해 주세요.');
+              }
+            }}
+          >
+            복사
+          </button>
+        </div>
+      ) : null}
 
       {loadError ? (
         <p style={{ color: '#b91c1c', fontSize: 14 }}>{loadError}</p>
@@ -436,84 +448,6 @@ export function AdminHealthCheckupWorkspace({
 
       {hasContent ? (
         <>
-          <header style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>생성 결과 · 건강검진 보고서 (검토·수정)</h1>
-            <button type="button" className="adminLegacySecondaryBtn" disabled={saving} onClick={() => void saveReview()}>
-              {saving ? '저장 중…' : '검토 내용 저장'}
-            </button>
-            <button type="button" className="adminLegacySmallBtn" disabled={generating} onClick={() => void generateContent()}>
-              {generating ? '재생성 중…' : '다시 생성'}
-            </button>
-            <span style={{ flexBasis: '100%', height: 0 }} aria-hidden />
-            <button
-              type="button"
-              className="adminLegacySmallBtn"
-              onClick={() => setPreviewOpen(true)}
-              title="chart-api 미리보기 JSON을 admin에서 모달로 표시합니다(편집 중이면 현재 초안 전달)."
-            >
-              미리보기
-            </button>
-            <button
-              type="button"
-              className="adminLegacySmallBtn"
-              disabled={pdfBusy}
-              title="응답을 모두 받을 때까지 버튼이 비활성화됩니다. Playwright PDF는 수 분 걸릴 수 있습니다."
-              onClick={() => void downloadPdf()}
-            >
-              {pdfBusy ? 'PDF 생성 중…' : 'PDF 다운로드'}
-            </button>
-            <button
-              type="button"
-              className="adminLegacySmallBtn"
-              disabled={shareBusy}
-              onClick={() => void issueExternalShareLink()}
-            >
-              {shareBusy ? '링크 발급 중…' : '외부 검토 링크'}
-            </button>
-          </header>
-          <p style={{ fontSize: 12, color: '#64748b', marginBottom: 12, lineHeight: 1.55 }}>
-            미리보기는 편집 중인 내용(저장 전)까지 반영합니다. PDF 다운로드는 chart-api가 DB에 <strong>저장된</strong> 내용으로 생성합니다 — 필요하면 먼저「검토 내용 저장」하세요. 외부 링크는
-            수의사가 동일 데이터를 검토·저장·PDF로 받을 수 있는 주소이며 7일간 유효합니다(저장 시 원본 run의{' '}
-            <code style={{ fontSize: 11 }}>generated_run_content</code>에 반영됩니다).
-          </p>
-
-          {sharePanel ? (
-            <div
-              role="status"
-              style={{
-                marginBottom: 14,
-                padding: '12px 14px',
-                border: `1px solid ${divider}`,
-                background: '#f0fdf4',
-                borderRadius: 8,
-                fontSize: 13,
-              }}
-            >
-              <div style={{ fontWeight: 800, marginBottom: 6 }}>외부 검토 링크</div>
-              <p style={{ margin: '0 0 8px', color: '#166534', fontSize: 12 }}>
-                만료 {sharePanel.expiresAt ? new Date(sharePanel.expiresAt).toLocaleString('ko-KR') : '(응답 없음)'}
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                <input readOnly value={sharePanel.shareUrl} style={{ flex: '1 1 240px', minWidth: 0, padding: 8, fontSize: 12 }} />
-                <button
-                  type="button"
-                  className="adminLegacySecondaryBtn"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(sharePanel.shareUrl);
-                    } catch {
-                      window.alert('복사에 실패했습니다. 입력란에서 직접 복사해 주세요.');
-                    }
-                  }}
-                >
-                  복사
-                </button>
-                <button type="button" className="adminLegacySmallBtn" onClick={() => setSharePanel(null)}>
-                  닫기
-                </button>
-              </div>
-            </div>
-          ) : null}
 
           <details open style={{ border: `1px solid ${divider}`, marginBottom: 10, background: '#fff' }}>
             <summary style={{ padding: '10px 12px', fontWeight: 700, cursor: 'pointer' }}>표지 (1p)</summary>
@@ -656,18 +590,7 @@ export function AdminHealthCheckupWorkspace({
                 value={draft.overallSummary}
                 onChange={(e) => setDraft((d) => ({ ...d, overallSummary: clamp(e.target.value, HEALTH_CHECKUP_MAX_OVERALL_CHARS) }))}
               />
-              <p
-                style={{
-                  margin: '6px 0 0',
-                  fontSize: 12,
-                  color:
-                    overallLen < HEALTH_CHECKUP_MIN_OVERALL_CHARS
-                      ? '#b45309'
-                      : overallLen > HEALTH_CHECKUP_MAX_OVERALL_CHARS
-                        ? '#b91c1c'
-                        : '#64748b',
-                }}
-              >
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: overallLen > HEALTH_CHECKUP_MAX_OVERALL_CHARS ? '#b91c1c' : '#b45309' }}>
                 {overallLen} / {HEALTH_CHECKUP_MAX_OVERALL_CHARS} (권장 최소 {HEALTH_CHECKUP_MIN_OVERALL_CHARS}자)
               </p>
             </div>
@@ -682,18 +605,7 @@ export function AdminHealthCheckupWorkspace({
                 value={draft.followUpCare}
                 onChange={(e) => setDraft((d) => ({ ...d, followUpCare: clamp(e.target.value, HEALTH_CHECKUP_MAX_FOLLOW_UP_CHARS) }))}
               />
-              <p
-                style={{
-                  margin: '6px 0 0',
-                  fontSize: 12,
-                  color:
-                    followLen < HEALTH_CHECKUP_MIN_FOLLOW_UP_CHARS
-                      ? '#b45309'
-                      : followLen > HEALTH_CHECKUP_MAX_FOLLOW_UP_CHARS
-                        ? '#b91c1c'
-                        : '#64748b',
-                }}
-              >
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: followLen > HEALTH_CHECKUP_MAX_FOLLOW_UP_CHARS ? '#b91c1c' : '#b45309' }}>
                 {followLen} / {HEALTH_CHECKUP_MAX_FOLLOW_UP_CHARS} (권장 최소 {HEALTH_CHECKUP_MIN_FOLLOW_UP_CHARS}자)
               </p>
             </div>
@@ -701,7 +613,7 @@ export function AdminHealthCheckupWorkspace({
 
           <details open style={{ border: `1px solid ${divider}`, marginBottom: 10, background: '#fff' }}>
             <summary style={{ padding: '10px 12px', fontWeight: 700, cursor: 'pointer' }}>권장 재검진</summary>
-            <div style={{ padding: '12px 14px', display: 'grid', gap: 14 }}>
+            <div style={{ padding: '12px 14px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
               {(
                 [
                   ['1–2주', 'recheckWithin1to2Weeks'],
@@ -713,187 +625,95 @@ export function AdminHealthCheckupWorkspace({
                 const raw = draft[key];
                 const { cardTitle, cardBody } = splitTimelineCardText(typeof raw === 'string' ? raw : '');
                 return (
-                  <div key={key} style={{ borderTop: `1px solid ${divider}`, paddingTop: 10 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{label}</div>
+                  <div key={key} style={{ display: 'grid', gap: 4 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>{label}</div>
                     <input
                       placeholder="제목"
-                      style={{ width: '100%', marginBottom: 6, padding: 8 }}
+                      style={{ width: '100%', padding: 8, fontSize: 13 }}
                       value={cardTitle}
                       onChange={(e) => setRecheckField(key, 'title', e.target.value)}
                     />
+                    <p style={{ margin: 0, fontSize: 11, color: cardTitle.length > HEALTH_CHECKUP_MAX_RECHECK_TITLE_CHARS ? '#b91c1c' : '#b45309', textAlign: 'right' }}>
+                      {cardTitle.length} / {HEALTH_CHECKUP_MAX_RECHECK_TITLE_CHARS}
+                    </p>
                     <textarea
                       placeholder="본문"
                       rows={3}
-                      style={{ width: '100%', padding: 8 }}
+                      style={{ width: '100%', padding: 8, fontSize: 13 }}
                       value={cardBody}
                       onChange={(e) => setRecheckField(key, 'body', e.target.value)}
                     />
+                    <p style={{ margin: 0, fontSize: 11, color: cardBody.length > HEALTH_CHECKUP_MAX_RECHECK_BODY_CHARS ? '#b91c1c' : '#b45309', textAlign: 'right' }}>
+                      {cardBody.length} / {HEALTH_CHECKUP_MAX_RECHECK_BODY_CHARS}
+                    </p>
                   </div>
                 );
               })}
             </div>
           </details>
 
-          <details open style={{ border: `1px solid ${divider}`, marginBottom: 10, background: '#fff' }}>
-            <summary style={{ padding: '10px 12px', fontWeight: 700, cursor: 'pointer' }}>
-              장기·검사·치과·영상 시트 (행 편집)
-            </summary>
-            <div style={{ padding: '12px 14px', display: 'grid', gap: 16 }}>
-              <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
-                vet-report와 동일하게 <code>variant: &quot;rows&quot;</code> 블록의 본문만 행 단위로 편집합니다. 이미지 슬롯 블록은 아래{' '}
-                <strong>이미지 배치</strong>에서 편집합니다. 스키마에 맞지 않는 데이터는 원시 JSON 모드로 열립니다.
-              </p>
-              {SYSTEM_KEYS.map((k) => {
-                const jsonText = systemsJsonRaw[k];
-                const pageTitle = SYSTEM_PAGE_LABELS[k];
-                const rowMax = rowMaxCharsForSystemKey(k);
-
-                if (jsonText !== undefined) {
-                  return (
-                    <div key={k} style={{ border: `1px solid ${divider}`, borderRadius: 8, padding: 12, background: '#fffbeb' }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
-                        {pageTitle} <span style={{ fontWeight: 400, color: '#92400e' }}>(원시 JSON)</span>
-                      </div>
-                      <textarea
-                        rows={12}
-                        style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 11, padding: 8 }}
-                        value={jsonText}
-                        onChange={(e) => setSystemsJsonRaw((prev) => ({ ...prev, [k]: e.target.value }))}
-                      />
-                      <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        <button
-                          type="button"
-                          className="adminLegacySmallBtn"
-                          onClick={() => {
-                            try {
-                              const parsed = JSON.parse(jsonText) as unknown;
-                              if (!Array.isArray(parsed)) {
-                                setSaveError(`${k}: 배열 JSON이어야 합니다.`);
-                                return;
-                              }
-                              if (parsed.length > 0 && parseHealthSystemsBlocksFromUnknown(parsed) === null) {
-                                setSaveError(`${k}: 블록 스키마가 올바르지 않습니다.`);
-                                return;
-                              }
-                              setSaveError(null);
-                              setDraft((d) => ({ ...d, [k]: parsed }));
-                              setSystemsJsonRaw((prev) => {
-                                const n = { ...prev };
-                                delete n[k];
-                                return n;
-                              });
-                            } catch {
-                              setSaveError(`${k}: JSON 파싱에 실패했습니다.`);
-                            }
-                          }}
-                        >
-                          검증 후 구조 편집으로 적용
-                        </button>
-                      </div>
+          {SYSTEM_KEYS.map((k) => {
+            const pageTitle = SYSTEM_PAGE_LABELS[k];
+            const rowMax = rowMaxCharsForSystemKey(k);
+            const blocks = getStructuredBlocksFromDraft(draft, k);
+            return (
+              <details key={k} open style={{ border: `1px solid ${divider}`, marginBottom: 10, background: '#fff' }}>
+                <summary style={{ padding: '10px 12px', fontWeight: 700, cursor: 'pointer' }}>{pageTitle}</summary>
+                <div style={{ padding: '12px 14px', display: 'grid', gap: 10 }}>
+                  {blocks.length === 0 ? (
+                    <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>블록이 비어 있습니다. 컨텐츠 생성 후 채워집니다.</p>
+                  ) : null}
+                  {blocks.map((block, bi) => (
+                    <div key={bi} style={{ marginTop: bi ? 14 : 0, paddingTop: bi ? 14 : 0, borderTop: bi ? `1px solid ${divider}` : undefined }}>
+                      {block.variant === 'rows' ? (
+                        <>
+                          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#334155' }}>
+                            {(block.titleKo || block.titleEn || `블록 ${bi + 1}`).trim() || `블록 ${bi + 1}`}
+                          </div>
+                          <div style={{ display: 'grid', gap: 10 }}>
+                            {block.rows.map((row, ri) => (
+                              <label key={ri} style={{ fontSize: 12, display: 'grid', gap: 4 }}>
+                                <span style={{ color: '#64748b' }}>{row.label}</span>
+                                <textarea
+                                  rows={3}
+                                  style={{ width: '100%', padding: 8, fontSize: 13 }}
+                                  value={row.content}
+                                  onChange={(e) => {
+                                    const v = clamp(e.target.value, rowMax);
+                                    setDraft((prev) => {
+                                      const cur = getStructuredBlocksFromDraft(prev, k);
+                                      if (!cur[bi] || cur[bi].variant !== 'rows') return prev;
+                                      const nextBlocks = structuredClone(cur) as HealthSystemsReportBlock[];
+                                      const b = nextBlocks[bi];
+                                      if (b.variant !== 'rows') return prev;
+                                      const nr = [...b.rows];
+                                      nr[ri] = { ...nr[ri], content: v };
+                                      nextBlocks[bi] = { ...b, rows: nr };
+                                      return { ...prev, [k]: nextBlocks };
+                                    });
+                                  }}
+                                />
+                                <span style={{ fontSize: 11, color: row.content.length > rowMax ? '#b91c1c' : '#b45309' }}>
+                                  {row.content.length} / {rowMax}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </>
+                      ) : null}
                     </div>
-                  );
-                }
-
-                const blocks = getStructuredBlocksFromDraft(draft, k);
-                return (
-                  <div key={k} style={{ border: `1px solid ${divider}`, borderRadius: 8, padding: 12, background: '#fafafa' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700 }}>{pageTitle}</div>
-                      <button
-                        type="button"
-                        className="adminLegacySmallBtn"
-                        onClick={() => {
-                          try {
-                            setSystemsJsonRaw((prev) => ({
-                              ...prev,
-                              [k]: JSON.stringify(Array.isArray(draft[k]) ? draft[k] : [], null, 2),
-                            }));
-                          } catch {
-                            setSystemsJsonRaw((prev) => ({ ...prev, [k]: '[]' }));
-                          }
-                        }}
-                      >
-                        원시 JSON
-                      </button>
-                    </div>
-                    {blocks.length === 0 ? (
-                      <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>블록이 비어 있습니다. 컨텐츠 생성 후 채워지거나, 원시 JSON으로 붙여넣을 수 있습니다.</p>
-                    ) : null}
-                    {blocks.map((block, bi) => (
-                      <div key={bi} style={{ marginTop: bi ? 14 : 0, paddingTop: bi ? 14 : 0, borderTop: bi ? `1px solid ${divider}` : undefined }}>
-                        {block.variant === 'rows' ? (
-                          <>
-                            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#334155' }}>
-                              {(block.titleKo || block.titleEn || `블록 ${bi + 1}`).trim() || `블록 ${bi + 1}`}
-                            </div>
-                            <div style={{ display: 'grid', gap: 10 }}>
-                              {block.rows.map((row, ri) => (
-                                <label key={ri} style={{ fontSize: 12, display: 'grid', gap: 4 }}>
-                                  <span style={{ color: '#64748b' }}>{row.label}</span>
-                                  <textarea
-                                    rows={3}
-                                    style={{ width: '100%', padding: 8, fontSize: 13 }}
-                                    value={row.content}
-                                    onChange={(e) => {
-                                      const v = clamp(e.target.value, rowMax);
-                                      setDraft((prev) => {
-                                        const cur = getStructuredBlocksFromDraft(prev, k);
-                                        if (!cur[bi] || cur[bi].variant !== 'rows') return prev;
-                                        const nextBlocks = structuredClone(cur) as HealthSystemsReportBlock[];
-                                        const b = nextBlocks[bi];
-                                        if (b.variant !== 'rows') return prev;
-                                        const nr = [...b.rows];
-                                        nr[ri] = { ...nr[ri], content: v };
-                                        nextBlocks[bi] = { ...b, rows: nr };
-                                        return { ...prev, [k]: nextBlocks };
-                                      });
-                                    }}
-                                  />
-                                  <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                                    {row.content.length} / {rowMax}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          </>
-                        ) : (
-                          <p style={{ margin: '8px 0 0', fontSize: 12, color: '#64748b' }}>
-                            <strong>{block.variant}</strong> 이미지 슬롯 — 아래 <strong>이미지 배치</strong> 패널에서 슬롯·캡션을 편집합니다.
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          </details>
-
-          <details open style={{ border: `1px solid ${divider}`, marginBottom: 10, background: '#fff' }}>
-            <summary style={{ padding: '10px 12px', fontWeight: 700, cursor: 'pointer' }}>이미지 배치 (5p·6p)</summary>
-            <div style={{ padding: '12px 14px' }}>
-              {systemsJsonRaw.systemsPage4Blocks !== undefined || systemsJsonRaw.systemsPage5Blocks !== undefined ? (
-                <p style={{ margin: 0, fontSize: 13, color: '#b45309' }}>
-                  4·5번 시트가 원시 JSON 모드입니다. 이미지 슬롯 편집을 쓰려면 해당 시트를 구조 편집으로 되돌린 뒤 저장하세요.
-                </p>
-              ) : (
-                <AdminHealthReportImageSlots
-                  runId={runId}
-                  page4Raw={draft.systemsPage4Blocks}
-                  page5Raw={draft.systemsPage5Blocks}
-                  onChangePage4={(blocks) => setDraft((d) => ({ ...d, systemsPage4Blocks: blocks }))}
-                  onChangePage5={(blocks) => setDraft((d) => ({ ...d, systemsPage5Blocks: blocks }))}
-                />
-              )}
-            </div>
-          </details>
+                  ))}
+                </div>
+              </details>
+            );
+          })}
 
           <details open style={{ border: `1px solid ${divider}`, marginBottom: 10, background: '#fff' }}>
             <summary style={{ padding: '10px 12px', fontWeight: 700, cursor: 'pointer' }}>혈액검사 해석 (7p)</summary>
             <div style={{ padding: '12px 14px' }}>
               <textarea
                 rows={6}
-                style={{ width: '100%', padding: 10 }}
+                style={{ width: '100%', fontSize: 13, padding: 10 }}
                 value={draft.labInterpretation ?? ''}
                 onChange={(e) =>
                   setDraft((d) => ({
@@ -902,9 +722,22 @@ export function AdminHealthCheckupWorkspace({
                   }))
                 }
               />
-              <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: (draft.labInterpretation ?? '').length > HEALTH_CHECKUP_LAB_INTERP_MAX_CHARS ? '#b91c1c' : '#b45309' }}>
                 {(draft.labInterpretation ?? '').length} / {HEALTH_CHECKUP_LAB_INTERP_MAX_CHARS}
               </p>
+            </div>
+          </details>
+
+          <details open style={{ border: `1px solid ${divider}`, marginBottom: 10, background: '#fff' }}>
+            <summary style={{ padding: '10px 12px', fontWeight: 700, cursor: 'pointer' }}>이미지 배치 (5p·6p)</summary>
+            <div style={{ padding: '12px 14px' }}>
+              <AdminHealthReportImageSlots
+                  runId={runId}
+                  page4Raw={draft.systemsPage4Blocks}
+                  page5Raw={draft.systemsPage5Blocks}
+                  onChangePage4={(blocks) => setDraft((d) => ({ ...d, systemsPage4Blocks: blocks }))}
+                  onChangePage5={(blocks) => setDraft((d) => ({ ...d, systemsPage5Blocks: blocks }))}
+                />
             </div>
           </details>
 

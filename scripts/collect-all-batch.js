@@ -38,6 +38,8 @@ function main() {
   console.log(ids.join(", "));
   console.log("");
 
+  const failedHospitals = [];
+
   for (let i = 0; i < ids.length; i++) {
     const hid = ids[i];
     console.log(`\n########## (${i + 1}/${ids.length}) hospital_id=${hid} ##########\n`);
@@ -46,13 +48,19 @@ function main() {
       stdio: "inherit",
       env: process.env,
     });
-    if (r.status !== 0) {
-      console.error(`\n✖ 배치 중단: hospital_id=${hid} (exit ${r.status ?? r.signal})`);
-      process.exit(r.status ?? 1);
+    const exitCode = r.status ?? (r.signal ? 1 : 0);
+    console.log(`[BATCH_HOSPITAL_DONE] ${JSON.stringify({ index: i + 1, total: ids.length, hospitalId: hid, exitCode })}`);
+    if (exitCode !== 0) {
+      console.error(`\n✖ 오류 발생: hospital_id=${hid} (exit ${exitCode}) — 다음 병원으로 계속 진행합니다.`);
+      failedHospitals.push(hid);
     }
   }
 
   console.log(`\n=== collect:all 배치 전체 완료 (${ids.length}개) ===`);
+  if (failedHospitals.length > 0) {
+    console.error(`실패한 병원 (${failedHospitals.length}개): ${failedHospitals.join(", ")}`);
+    process.exit(1);
+  }
 }
 
 main();

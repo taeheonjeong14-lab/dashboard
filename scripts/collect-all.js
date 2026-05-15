@@ -17,6 +17,7 @@ require("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const HOSPITAL_ID = (process.argv[2] || "").trim();
+const STEP_TIMEOUT_MS = 15 * 60 * 1000; // 단계당 최대 15분
 
 /** @type {{ phase: string; completedSteps: { index: number; name: string }[]; logFilePath: string | null }} */
 const runState = { phase: "시작 전", completedSteps: [], logFilePath: null };
@@ -178,8 +179,11 @@ async function resolveHospital(hospitalId) {
   };
 }
 
+/**
+ * @returns {Promise<{ success: boolean; durationSec: number; error?: string }>}
+ */
 function runStep(stepIndex, totalSteps, stepName, command, args, options = {}) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const prettyArgs = args.join(" ");
     const pipeChild = Boolean(logFileStream);
     emit(`▶ ${stepIndex}/${totalSteps} ${stepName}`);
@@ -190,13 +194,35 @@ function runStep(stepIndex, totalSteps, stepName, command, args, options = {}) {
 
     const stepStarted = Date.now();
     const { env: optEnv, ...restOpts } = options;
-    const child = spawn(command, args, {
-      cwd: ROOT_DIR,
-      shell: false,
-      ...restOpts,
-      env: optEnv ?? process.env,
-      stdio: pipeChild ? ["ignore", "pipe", "pipe"] : "inherit",
-    });
+
+    let child;
+    try {
+      child = spawn(command, args, {
+        cwd: ROOT_DIR,
+        shell: false,
+        ...restOpts,
+        env: optEnv ?? process.env,
+        stdio: pipeChild ? ["ignore", "pipe", "pipe"] : "inherit",
+      });
+    } catch (spawnErr) {
+      const sec = ((Date.now() - stepStarted) / 1000).toFixed(1);
+      const msg = spawnErr && spawnErr.message ? spawnErr.message : String(spawnErr);
+      emit(`✗ ${stepIndex}/${totalSteps} 실패 (${sec}s) — ${stepName}: spawn 오류: ${msg}`, "err");
+      resolve({ success: false, durationSec: parseFloat(sec), error: `spawn 오류: ${msg}` });
+      return;
+    }
+
+    let settled = false;
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { child.kill("SIGKILL"); } catch { /* 이미 종료됐을 수 있음 */ }
+      const sec = ((Date.now() - stepStarted) / 1000).toFixed(1);
+      const msg = `타임아웃 (${STEP_TIMEOUT_MS / 60000}분 초과)`;
+      emit(`✗ ${stepIndex}/${totalSteps} 실패 (${sec}s) — ${stepName}: ${msg}`, "err");
+      resolve({ success: false, durationSec: parseFloat(sec), error: msg });
+    }, STEP_TIMEOUT_MS);
 
     if (pipeChild && child.stdout) {
       child.stdout.setEncoding("utf8");
@@ -208,29 +234,32 @@ function runStep(stepIndex, totalSteps, stepName, command, args, options = {}) {
     }
 
     child.on("error", (err) => {
-      reject(
-        new Error(
-          `단계 ${stepIndex}/${totalSteps} "${stepName}" — spawn 오류: ${err.message || err}`
-        )
-      );
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      const sec = ((Date.now() - stepStarted) / 1000).toFixed(1);
+      const msg = err && err.message ? err.message : String(err);
+      emit(`✗ ${stepIndex}/${totalSteps} 실패 (${sec}s) — ${stepName}: spawn 오류: ${msg}`, "err");
+      resolve({ success: false, durationSec: parseFloat(sec), error: `spawn 오류: ${msg}` });
     });
 
     child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
       const sec = ((Date.now() - stepStarted) / 1000).toFixed(1);
       if (code === 0) {
         emit(`✓ ${stepIndex}/${totalSteps} 완료 (${sec}s) — ${stepName}`);
-        resolve(sec);
+        resolve({ success: true, durationSec: parseFloat(sec) });
         return;
       }
       const tail =
         pipeChild && runState.logFilePath
-          ? `자세한 출력은 로그 파일 끝부분을 확인하세요: ${runState.logFilePath}`
-          : "콘솔에 출력된 해당 스크립트 메시지를 확인하세요.";
-      reject(
-        new Error(
-          `단계 ${stepIndex}/${totalSteps} "${stepName}" — 종료 코드 ${code} (${sec}s). ${tail}`
-        )
-      );
+          ? `로그 파일 확인: ${runState.logFilePath}`
+          : "콘솔 출력을 확인하세요.";
+      const msg = `종료 코드 ${code}. ${tail}`;
+      emit(`✗ ${stepIndex}/${totalSteps} 실패 (${sec}s) — ${stepName}: ${msg}`, "err");
+      resolve({ success: false, durationSec: parseFloat(sec), error: msg });
     });
   });
 }
@@ -314,24 +343,41 @@ async function main() {
 
   runState.completedSteps = [];
   const total = steps.length;
+  const failedSteps = [];
 
   runState.phase = "수집 단계 실행";
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     const stepIndex = i + 1;
     runState.phase = `단계 ${stepIndex}/${total}: ${step.name}`;
-    await runStep(stepIndex, total, step.name, step.command, step.args, step.options);
-    runState.completedSteps.push({ index: stepIndex, name: step.name });
+    const result = await runStep(stepIndex, total, step.name, step.command, step.args, step.options);
+    if (result.success) {
+      runState.completedSteps.push({ index: stepIndex, name: step.name });
+    } else {
+      failedSteps.push({ index: stepIndex, name: step.name, error: result.error });
+    }
   }
 
   const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
-  runState.phase = "완료";
-  emit(`========== collect:all 전체 완료 (${elapsedSec}s) ==========`);
-  emit(`완료된 단계: ${runState.completedSteps.map((s) => `${s.index}. ${s.name}`).join(" → ")}`);
+  if (failedSteps.length === 0) {
+    runState.phase = "완료";
+    emit(`========== collect:all 전체 완료 (${elapsedSec}s) ==========`);
+    emit(`완료된 단계: ${runState.completedSteps.map((s) => `${s.index}. ${s.name}`).join(" → ")}`);
+  } else {
+    runState.phase = "일부 실패";
+    emit(`========== collect:all 완료 (${failedSteps.length}개 단계 실패, 전체 ${elapsedSec}s) ==========`, "err");
+    if (runState.completedSteps.length > 0) {
+      emit(`성공한 단계: ${runState.completedSteps.map((s) => `${s.index}. ${s.name}`).join(" → ")}`);
+    }
+    emit(`실패한 단계: ${failedSteps.map((s) => `${s.index}. ${s.name}`).join(", ")}`, "err");
+  }
   if (runState.logFilePath) {
     emit(`상세 로그(자식 출력 포함): ${runState.logFilePath}`);
   }
   closeFileLog();
+  if (failedSteps.length > 0) {
+    process.exit(1);
+  }
 }
 
 main().catch((err) => {

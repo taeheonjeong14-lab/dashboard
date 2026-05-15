@@ -141,27 +141,14 @@ export default function AdminHealthReport() {
 
       <div className="adminLayoutMainPane">
         <div className="adminLayoutMainColumnInset">
-          <header style={{ marginBottom: 16 }}>
-            <h1
-              style={{
-                fontSize: 22,
-                margin: '0 0 8px',
-                fontWeight: 700,
-                color: '#0f172a',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              건강검진
-            </h1>
-            <p style={{ margin: 0, color: '#475569', fontSize: 14, lineHeight: 1.55 }}>
-              왼쪽은 <code style={{ fontSize: 12 }}>health_checkup</code> 이 저장된 run 목록입니다. 선택 시 생성 결과를 불러와
-              검토·수정·저장합니다 (vet-report <code style={{ fontSize: 12 }}>/runs/…/content</code> 계약과 호환).
-            </p>
-          </header>
-
           {selectedId ? (
             <div style={{ borderTop: `1px solid ${divider}`, paddingTop: 12 }}>
-              <AdminHealthCheckupWorkspace runId={selectedId} onRunsChanged={() => void loadRuns()} />
+              <AdminHealthCheckupWorkspace
+                runId={selectedId}
+                hospitalName={runs.find((r) => r.parseRunId === selectedId)?.hospitalName ?? undefined}
+                patientName={runs.find((r) => r.parseRunId === selectedId)?.patientName ?? undefined}
+                onRunsChanged={() => void loadRuns()}
+              />
             </div>
           ) : (
             <p style={{ fontSize: 14, color: '#64748b' }}>목록에서 항목을 선택해 주세요.</p>
