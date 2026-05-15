@@ -82,6 +82,7 @@ export default function AdminDataUpload() {
   const [collectHospitalId, setCollectHospitalId] = useState('');
   const [collectSubmitting, setCollectSubmitting] = useState(false);
   const [collectJob, setCollectJob] = useState<CollectJob | null>(null);
+  const [collectBatchCount, setCollectBatchCount] = useState<number | null>(null);
   const [collectError, setCollectError] = useState<string | null>(null);
   const [collectHistory, setCollectHistory] = useState<CollectHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -174,6 +175,7 @@ export default function AdminDataUpload() {
   async function runCollect(hospitalId?: string) {
     setCollectSubmitting(true);
     setCollectJob(null);
+    setCollectBatchCount(null);
     setCollectError(null);
     try {
       const res = await fetch('/api/admin/collect/run', {
@@ -182,12 +184,17 @@ export default function AdminDataUpload() {
         credentials: 'include',
         body: JSON.stringify(hospitalId ? { hospitalId } : {}),
       });
-      const data = (await res.json()) as { ok?: boolean; jobId?: string; error?: string };
-      if (!res.ok || !data.jobId) {
+      const data = (await res.json()) as { ok?: boolean; jobId?: string; jobCount?: number; error?: string };
+      if (!res.ok || !data.ok) {
         setCollectError(data.error ?? '수집 요청 생성에 실패했습니다.');
         return;
       }
-      setCollectJob({ id: data.jobId, status: 'pending', output: null, steps: null, upserts: null });
+      if (data.jobCount != null) {
+        setCollectBatchCount(data.jobCount);
+        void loadHistory();
+      } else if (data.jobId) {
+        setCollectJob({ id: data.jobId, status: 'pending', output: null, steps: null, upserts: null });
+      }
     } catch (e) {
       setCollectError(e instanceof Error ? e.message : '알 수 없는 오류');
     } finally {
@@ -295,6 +302,11 @@ export default function AdminDataUpload() {
                   {collectJob && collectJob.status === 'pending' && (
                     <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
                       Worker가 곧 수집을 시작합니다… (최대 30초 대기)
+                    </p>
+                  )}
+                  {collectBatchCount != null && (
+                    <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
+                      {collectBatchCount}개 병원 수집이 대기열에 추가됐습니다. Worker가 순서대로 처리합니다.
                     </p>
                   )}
                 </div>
