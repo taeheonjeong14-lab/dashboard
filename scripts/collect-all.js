@@ -202,7 +202,10 @@ function runStep(stepIndex, totalSteps, stepName, command, args, options = {}) {
         shell: false,
         ...restOpts,
         env: optEnv ?? process.env,
-        stdio: pipeChild ? ["ignore", "pipe", "pipe"] : "inherit",
+        // 항상 pipe 사용: inherit 시 Python이 직접 파이프에 써서 버퍼가 찰 경우
+        // Node.js의 console.log()가 동기 블록 → 이벤트 루프 멈춤 → setTimeout 지연 발생.
+        // pipe + 비동기 포워딩으로 이벤트 루프를 항상 살아있게 유지.
+        stdio: ["ignore", "pipe", "pipe"],
       });
     } catch (spawnErr) {
       const sec = ((Date.now() - stepStarted) / 1000).toFixed(1);
@@ -217,20 +220,44 @@ function runStep(stepIndex, totalSteps, stepName, command, args, options = {}) {
     const timeoutHandle = setTimeout(() => {
       if (settled) return;
       settled = true;
-      try { child.kill("SIGKILL"); } catch { /* 이미 종료됐을 수 있음 */ }
+      // Windows: child.kill()은 Python 자체만 종료하고 자식 프로세스(크롬 등)는 살아남음.
+      // taskkill /F /T로 프로세스 트리 전체 강제 종료.
+      try {
+        if (process.platform === "win32" && child.pid) {
+          spawn("taskkill", ["/F", "/T", "/PID", String(child.pid)], {
+            shell: false, stdio: "ignore",
+          }).on("error", () => {});
+        } else {
+          child.kill("SIGKILL");
+        }
+      } catch { /* 이미 종료됐을 수 있음 */ }
       const sec = ((Date.now() - stepStarted) / 1000).toFixed(1);
       const msg = `타임아웃 (${STEP_TIMEOUT_MS / 60000}분 초과)`;
       emit(`✗ ${stepIndex}/${totalSteps} 실패 (${sec}s) — ${stepName}: ${msg}`, "err");
       resolve({ success: false, durationSec: parseFloat(sec), error: msg });
     }, STEP_TIMEOUT_MS);
 
-    if (pipeChild && child.stdout) {
+    // 항상 stdout/stderr를 비동기로 드레인해서 파이프 블록 방지.
+    // 파일 로그 모드: 로그 파일에 기록. 콘솔 모드: 부모 stdout/stderr에 포워딩(worker 파싱용).
+    if (child.stdout) {
       child.stdout.setEncoding("utf8");
-      child.stdout.on("data", (chunk) => writeChildChunk(stepIndex, totalSteps, stepName, "stdout", chunk));
+      child.stdout.on("data", (chunk) => {
+        if (pipeChild) {
+          writeChildChunk(stepIndex, totalSteps, stepName, "stdout", chunk);
+        } else {
+          process.stdout.write(chunk);
+        }
+      });
     }
-    if (pipeChild && child.stderr) {
+    if (child.stderr) {
       child.stderr.setEncoding("utf8");
-      child.stderr.on("data", (chunk) => writeChildChunk(stepIndex, totalSteps, stepName, "stderr", chunk));
+      child.stderr.on("data", (chunk) => {
+        if (pipeChild) {
+          writeChildChunk(stepIndex, totalSteps, stepName, "stderr", chunk);
+        } else {
+          process.stderr.write(chunk);
+        }
+      });
     }
 
     child.on("error", (err) => {
