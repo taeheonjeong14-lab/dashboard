@@ -2577,7 +2577,7 @@ export async function POST(request: NextRequest) {
     const ocrConfigured = Boolean(process.env.GOOGLE_CLOUD_CLIENT_EMAIL && process.env.GOOGLE_CLOUD_PRIVATE_KEY &&
       (sourceFileType !== 'application/pdf' || process.env.GOOGLE_CLOUD_OCR_INPUT_BUCKET));
     console.log(`[text-bucketing DEBUG] ocrConfigured=${ocrConfigured} fileType=${sourceFileType}`);
-    let ocr: { text: string; confidence: number | null; rows: import('@/lib/google-vision').OcrRow[] } = { text: '', confidence: null, rows: [] };
+    let ocr: import('@/lib/google-vision').VisionOcrResult = { text: '', confidence: null, rows: [] };
     if (ocrConfigured) {
       try {
         ocr = await runGoogleVisionOcr(binary, sourceFileType);
