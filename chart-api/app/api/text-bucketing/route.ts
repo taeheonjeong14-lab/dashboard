@@ -2574,7 +2574,11 @@ export async function POST(request: NextRequest) {
       filename: sourceFileName || "report.pdf",
     });
     console.log(`[text-bucketing DEBUG] llmLines count=${llmLines.length}, first3=${JSON.stringify(llmLines.slice(0, 3))}, last3=${JSON.stringify(llmLines.slice(-3))}`);
-    const ocr = await runGoogleVisionOcr(binary, sourceFileType);
+    const ocrConfigured = Boolean(process.env.GOOGLE_CLOUD_CLIENT_EMAIL && process.env.GOOGLE_CLOUD_PRIVATE_KEY &&
+      (sourceFileType !== 'application/pdf' || process.env.GOOGLE_CLOUD_OCR_INPUT_BUCKET));
+    const ocr = ocrConfigured
+      ? await runGoogleVisionOcr(binary, sourceFileType)
+      : { text: '', confidence: null, rows: [] };
 
     const pasteLines =
       chartType === "efriends" ? orderedLinesFromPastedChartText(chartPasteText, "efriends") : [];
