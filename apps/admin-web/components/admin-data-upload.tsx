@@ -10,6 +10,33 @@ import { useChartExtraction } from '@/components/chart-extraction-provider';
 import AdminDataConsole from '@/components/admin-data-console';
 import { Upload } from 'lucide-react';
 
+const COLLECT_STEPS = [
+  { key: 'blog_metrics', label: '블로그 일별 지표' },
+  { key: 'smartplace', label: '스마트플레이스 유입' },
+  { key: 'keyword_rank', label: '블로그/플레이스 키워드 순위' },
+  { key: 'searchad', label: 'SearchAd 일별 성과' },
+] as const;
+
+type StepKey = (typeof COLLECT_STEPS)[number]['key'];
+
+function IndeterminateCheckbox({
+  checked,
+  indeterminate,
+  onChange,
+  style,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  style?: CSSProperties;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return <input ref={ref} type="checkbox" checked={checked} onChange={onChange} style={style} />;
+}
+
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
 
 type UploadSection = 'pdf' | 'stats' | 'collect';
@@ -79,13 +106,48 @@ export default function AdminDataUpload() {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [collectHospitalId, setCollectHospitalId] = useState('');
+  // selection: Map<hospitalId, Set<StepKey>> — 병원별 선택된 수집 항목
+  const [selection, setSelection] = useState<Map<string, Set<StepKey>>>(new Map());
   const [collectSubmitting, setCollectSubmitting] = useState(false);
   const [collectJob, setCollectJob] = useState<CollectJob | null>(null);
   const [collectBatchCount, setCollectBatchCount] = useState<number | null>(null);
   const [collectError, setCollectError] = useState<string | null>(null);
   const [collectHistory, setCollectHistory] = useState<CollectHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  const totalSelected = Array.from(selection.values()).reduce((sum, s) => sum + s.size, 0);
+  const totalPossible = hospitals.length * COLLECT_STEPS.length;
+  const isAllSelected = totalPossible > 0 && totalSelected === totalPossible;
+  const isAnySelected = totalSelected > 0;
+
+  function toggleAll(checked: boolean) {
+    setSelection(
+      checked
+        ? new Map(hospitals.map((h) => [h.id, new Set(COLLECT_STEPS.map((s) => s.key))]))
+        : new Map(),
+    );
+  }
+
+  function toggleHospital(hid: string, checked: boolean) {
+    setSelection((prev) => {
+      const next = new Map(prev);
+      if (checked) next.set(hid, new Set(COLLECT_STEPS.map((s) => s.key)));
+      else next.delete(hid);
+      return next;
+    });
+  }
+
+  function toggleStep(hid: string, step: StepKey, checked: boolean) {
+    setSelection((prev) => {
+      const next = new Map(prev);
+      const steps = new Set(prev.get(hid) ?? []);
+      if (checked) steps.add(step);
+      else steps.delete(step);
+      if (steps.size === 0) next.delete(hid);
+      else next.set(hid, steps);
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -172,17 +234,20 @@ export default function AdminDataUpload() {
     if (section === 'collect') void loadHistory();
   }, [section]);
 
-  async function runCollect(hospitalId?: string) {
+  async function runCollect() {
     setCollectSubmitting(true);
     setCollectJob(null);
     setCollectBatchCount(null);
     setCollectError(null);
     try {
+      const jobs = Array.from(selection.entries())
+        .filter(([, steps]) => steps.size > 0)
+        .map(([hospitalId, steps]) => ({ hospitalId, steps: Array.from(steps) }));
       const res = await fetch('/api/admin/collect/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(hospitalId ? { hospitalId } : {}),
+        body: JSON.stringify({ jobs }),
       });
       const data = (await res.json()) as { ok?: boolean; jobId?: string; jobCount?: number; error?: string };
       if (!res.ok || !data.ok) {
@@ -238,67 +303,125 @@ export default function AdminDataUpload() {
       <div className="adminLayoutMainColumnInset">
           {section === 'collect' ? (
             <>
-              <header style={{ marginBottom: 20 }}>
-                <h1
-                  style={{
-                    fontSize: 22,
-                    margin: '0 0 8px',
-                    fontWeight: 700,
-                    color: '#0f172a',
-                    letterSpacing: '-0.02em',
-                  }}
-                >
-                  자동 수집
-                </h1>
-                <p style={{ margin: 0, color: '#475569', fontSize: 14, lineHeight: 1.55 }}>
-                  블로그 일별 지표 → 스마트플레이스 유입 → 키워드 순위 → SearchAd 성과를 순서대로 수집합니다.
-                </p>
-              </header>
-
-              <div className="adminLegacyBlockBleed">
-                <div style={{ display: 'grid', gap: 14 }}>
-                  <div style={{ display: 'grid', gap: 6 }}>
-                    <label htmlFor="collectHospitalId" style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>
-                      병원
-                    </label>
-                    {hospitalsLoading ? (
-                      <p style={{ margin: '8px 0 0', fontSize: 13, color: '#64748b' }}>병원 목록 불러오는 중…</p>
-                    ) : hospitalsError ? (
-                      <p style={{ margin: '8px 0 0', fontSize: 13, color: '#b91c1c' }}>{hospitalsError}</p>
-                    ) : (
-                      <select
-                        id="collectHospitalId"
-                        value={collectHospitalId}
-                        onChange={(e) => setCollectHospitalId(e.target.value)}
-                        style={selectLineStyle}
+<div className="adminLegacyBlockBleed">
+                <div style={{ display: 'grid', gap: 16 }}>
+                  {/* 3단계 트리 체크박스 */}
+                  {hospitalsLoading ? (
+                    <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>병원 목록 불러오는 중…</p>
+                  ) : hospitalsError ? (
+                    <p style={{ margin: 0, fontSize: 13, color: '#b91c1c' }}>{hospitalsError}</p>
+                  ) : (
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                      {/* 1단계: 전체 선택 */}
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 14px',
+                          background: '#e2e8f0',
+                          borderBottom: '1px solid #cbd5e1',
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: '#0f172a',
+                          userSelect: 'none',
+                        }}
                       >
-                        <option value="">병원 선택</option>
-                        {hospitals.map((h) => (
-                          <option key={h.id} value={h.id}>
-                            {h.name_ko}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                        <IndeterminateCheckbox
+                          checked={isAllSelected}
+                          indeterminate={!isAllSelected && isAnySelected}
+                          onChange={(e) => toggleAll(e.target.checked)}
+                        />
+                        전체 병원 / 전체 항목
+                        <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 2, fontSize: 12 }}>
+                          ({selection.size}/{hospitals.length}개 병원)
+                        </span>
+                      </label>
+
+                      {/* 2단계: 병원 목록 + 3단계: 항목 */}
+                      <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+                        {hospitals.map((h, hi) => {
+                          const hSteps = selection.get(h.id);
+                          const hChecked = (hSteps?.size ?? 0) === COLLECT_STEPS.length;
+                          const hIndeterminate = (hSteps?.size ?? 0) > 0 && !hChecked;
+                          const isLast = hi === hospitals.length - 1;
+                          return (
+                            <div key={h.id} style={{ borderBottom: isLast ? 'none' : '1px solid #e2e8f0' }}>
+                              {/* 병원 행 */}
+                              <label
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
+                                  padding: '9px 14px 9px 28px',
+                                  background: '#f8fafc',
+                                  borderBottom: '1px solid #f1f5f9',
+                                  cursor: 'pointer',
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  color: '#334155',
+                                  userSelect: 'none',
+                                }}
+                              >
+                                <IndeterminateCheckbox
+                                  checked={hChecked}
+                                  indeterminate={hIndeterminate}
+                                  onChange={(e) => toggleHospital(h.id, e.target.checked)}
+                                />
+                                {h.name_ko}
+                              </label>
+                              {/* 항목 행들 */}
+                              {COLLECT_STEPS.map((step, si) => (
+                                <label
+                                  key={step.key}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    padding: '7px 14px 7px 48px',
+                                    borderBottom:
+                                      si < COLLECT_STEPS.length - 1 ? '1px solid #f8fafc' : 'none',
+                                    cursor: 'pointer',
+                                    fontSize: 12,
+                                    color: '#475569',
+                                    userSelect: 'none',
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={hSteps?.has(step.key) ?? false}
+                                    onChange={(e) => toggleStep(h.id, step.key, e.target.checked)}
+                                  />
+                                  {step.label}
+                                </label>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 수집 시작 버튼 */}
+                  <div>
                     <button
                       type="button"
                       className="adminLegacyPrimaryBtn"
-                      disabled={collectSubmitting || !collectHospitalId || hospitalsLoading}
-                      onClick={() => void runCollect(collectHospitalId)}
-                    >
-                      {collectSubmitting ? '요청 중…' : '선택 병원 수집'}
-                    </button>
-                    <button
-                      type="button"
-                      className="adminLegacySecondaryBtn"
-                      disabled={collectSubmitting}
+                      disabled={collectSubmitting || !isAnySelected || hospitalsLoading}
                       onClick={() => void runCollect()}
                     >
-                      {collectSubmitting ? '요청 중…' : '전체 병원 수집'}
+                      {collectSubmitting
+                        ? '요청 중…'
+                        : `수집 시작 (${selection.size}개 병원)`}
                     </button>
+                    {!isAnySelected && !hospitalsLoading && (
+                      <p style={{ margin: '6px 0 0', fontSize: 12, color: '#94a3b8' }}>
+                        병원과 항목을 하나 이상 선택해 주세요.
+                      </p>
+                    )}
                   </div>
+
                   {collectJob && collectJob.status === 'pending' && (
                     <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
                       Worker가 곧 수집을 시작합니다… (최대 30초 대기)

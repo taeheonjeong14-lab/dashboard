@@ -14,21 +14,13 @@ import {
 
 const divider = 'rgba(15, 23, 42, 0.1)';
 
-function formatRunRailTitle(item: HistoryItem): string {
-  return item.friendlyId?.trim() ? item.friendlyId.trim() : '— (이전 데이터)';
-}
-
-function formatRunRailDate(iso: string): string {
+function formatRunRailDateShort(iso: string): string {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleString('ko-KR', {
-      month: 'numeric',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const d = new Date(iso);
+    return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
   } catch {
-    return iso;
+    return '—';
   }
 }
 
@@ -40,6 +32,8 @@ export default function AdminChartData() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [filterHospital, setFilterHospital] = useState('');
+  const [filterMonth, setFilterMonth] = useState('');
   const [serverMeta, setServerMeta] = useState<{ totalParseRuns: number; limit: number } | null>(null);
   const [selectedId, setSelectedId] = useState('');
 
@@ -111,10 +105,22 @@ export default function AdminChartData() {
     if (lastRunId) void loadHistoryList();
   }, [lastRunId, loadHistoryList]);
 
+  const hospitalOptions = useMemo(
+    () => [...new Set(history.map((h) => h.hospitalName?.trim() ?? '').filter(Boolean))].sort(),
+    [history],
+  );
+  const monthOptions = useMemo(
+    () => [...new Set(history.map((h) => h.createdAt.slice(0, 7)).filter(Boolean))].sort().reverse(),
+    [history],
+  );
+
   const filteredHistory = useMemo(() => {
+    let items = history;
+    if (filterHospital) items = items.filter((h) => (h.hospitalName?.trim() ?? '') === filterHospital);
+    if (filterMonth) items = items.filter((h) => h.createdAt.startsWith(filterMonth));
     const q = search.trim().toLowerCase();
-    if (!q) return history;
-    return history.filter((item) => {
+    if (!q) return items;
+    return items.filter((item) => {
       const hay = [
         item.id,
         item.friendlyId ?? '',
@@ -127,7 +133,7 @@ export default function AdminChartData() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [history, search]);
+  }, [history, filterHospital, filterMonth, search]);
 
   useEffect(() => {
     if (filteredHistory.length === 0) {
@@ -201,8 +207,43 @@ export default function AdminChartData() {
             }}
             disabled={historyLoading}
           />
+          {!historyLoading && history.length > 0 && (
+            <span style={{ fontSize: 11.5, color: '#94a3b8', flexShrink: 0 }}>
+              {search.trim() || filterHospital || filterMonth
+                ? `${filteredHistory.length} / ${history.length}`
+                : history.length}건
+            </span>
+          )}
         </div>
-        <div style={{ maxHeight: 'min(66vh, calc(100vh - 220px))', overflow: 'auto' }}>
+        {!historyLoading && history.length > 0 && (
+          <div className="adminRailFilterBar">
+            <select
+              className="adminRailFilterSelect"
+              value={filterHospital}
+              onChange={(e) => setFilterHospital(e.target.value)}
+              aria-label="병원 필터"
+            >
+              <option value="">병원 전체</option>
+              {hospitalOptions.map((h) => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </select>
+            <select
+              className="adminRailFilterSelect"
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(e.target.value)}
+              aria-label="추출 날짜 필터"
+            >
+              <option value="">추출월 전체</option>
+              {monthOptions.map((m) => (
+                <option key={m} value={m}>
+                  {`${m.slice(2, 4)}년 ${String(Number(m.slice(5, 7)))}월`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div style={{ maxHeight: 'min(66vh, calc(100vh - 260px))', overflow: 'auto' }}>
           {historyLoading ? (
             <p style={{ margin: '10px 10px', fontSize: 12, color: '#64748b' }}>불러오는 중…</p>
           ) : listError ? (
@@ -220,15 +261,17 @@ export default function AdminChartData() {
                 onClick={() => setSelectedId(item.id)}
                 disabled={historyLoading}
               >
-                <span style={{ display: 'block', fontWeight: 700, color: 'inherit' }}>
-                  {formatRunRailTitle(item)}
-                </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ fontWeight: 700, color: 'inherit', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {hospitalGroupKey(item.hospitalName) || '—'}
+                  </span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
+                    {formatRunRailDateShort(item.createdAt)}
+                  </span>
+                </div>
                 <span className="adminRailSub">
-                  {hospitalGroupKey(item.hospitalName)}
-                  {item.patientName?.trim() ? ` · ${item.patientName.trim()}` : ''}
-                </span>
-                <span className="adminRailSub" style={{ marginTop: 2 }}>
-                  {formatRunRailDate(item.createdAt)}
+                  {item.patientName?.trim() ? `${item.patientName.trim()} · ` : ''}
+                  {item.friendlyId?.trim() ?? '—'}
                 </span>
               </button>
             ))
@@ -278,43 +321,13 @@ export default function AdminChartData() {
           ) : filteredHistory.length === 0 ? (
             <p style={{ fontSize: 14, color: '#64748b' }}>검색 조건에 맞는 이력이 없습니다. 왼쪽 검색어를 바꿔 보세요.</p>
           ) : selected ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, minHeight: 0 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 10,
-                  alignItems: 'center',
-                  marginBottom: 12,
-                  paddingBottom: 12,
-                  borderBottom: `1px solid ${divider}`,
-                }}
-              >
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
-                  {hospitalGroupKey(selected.hospitalName)}
-                </span>
-                <span style={{ fontSize: 12, color: '#64748b', fontFamily: 'ui-monospace, monospace' }}>
-                  {selected.friendlyId ?? selected.id}
-                </span>
-                <Link
-                  href={`/admin/runs/${encodeURIComponent(selected.id)}`}
-                  className="adminLegacySmallBtn"
-                  style={{ marginLeft: 'auto' }}
-                >
-                  전체 페이지로
-                </Link>
-                <button
-                  type="button"
-                  className="adminLegacyDangerBtn"
-                  onClick={() => void deleteRun(selected)}
-                  disabled={deletingId === selected.id}
-                >
-                  {deletingId === selected.id ? '삭제 중…' : '데이터 삭제'}
-                </button>
-              </div>
-              <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', minHeight: 0 }}>
-                <AdminRunExtractionDetail runId={selected.id} embedded />
-              </div>
+            <div style={{ maxHeight: 'calc(100vh - 140px)', overflowY: 'auto', minHeight: 0 }}>
+              <AdminRunExtractionDetail
+                runId={selected.id}
+                embedded
+                onDelete={() => void deleteRun(selected)}
+                deleting={deletingId === selected.id}
+              />
             </div>
           ) : (
             <p style={{ fontSize: 14, color: '#64748b' }}>왼쪽에서 항목을 선택해 주세요.</p>

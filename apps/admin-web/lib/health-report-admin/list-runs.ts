@@ -27,7 +27,7 @@ export async function loadHealthCheckupReportList(): Promise<GeneratedContentLis
   );
 
   const [{ data: runs }, { data: basics }] = await Promise.all([
-    sb.schema('chart_pdf').from('parse_runs').select('id, friendly_id').in('id', runIds),
+    sb.schema('chart_pdf').from('parse_runs').select('id, friendly_id, created_at').in('id', runIds),
     sb
       .schema('chart_pdf')
       .from('result_basic_info')
@@ -35,10 +35,13 @@ export async function loadHealthCheckupReportList(): Promise<GeneratedContentLis
       .in('parse_run_id', runIds),
   ]);
 
-  const runMap = new Map<string, { friendly_id: string | null }>();
+  const runMap = new Map<string, { friendly_id: string | null; created_at: string | null }>();
   for (const r of runs ?? []) {
     const o = r as Record<string, unknown>;
-    runMap.set(String(o.id), { friendly_id: o.friendly_id != null ? String(o.friendly_id) : null });
+    runMap.set(String(o.id), {
+      friendly_id: o.friendly_id != null ? String(o.friendly_id) : null,
+      created_at: o.created_at != null ? String(o.created_at) : null,
+    });
   }
   const basicMap = new Map<string, { patient_name: string | null; hospital_name: string | null }>();
   for (const b of basics ?? []) {
@@ -63,6 +66,7 @@ export async function loadHealthCheckupReportList(): Promise<GeneratedContentLis
       createdAt: iso(r.created_at),
       updatedAt: iso(r.updated_at),
       friendlyId: fr?.friendly_id ?? null,
+      parseRunCreatedAt: fr?.created_at ?? null,
       patientName: bi?.patient_name ?? null,
       hospitalName: bi?.hospital_name ?? null,
     };

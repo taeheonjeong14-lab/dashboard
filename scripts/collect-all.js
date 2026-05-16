@@ -19,6 +19,12 @@ const ROOT_DIR = path.resolve(__dirname, "..");
 const HOSPITAL_ID = (process.argv[2] || "").trim();
 const STEP_TIMEOUT_MS = 15 * 60 * 1000; // 단계당 최대 15분
 
+const STEPS_FILTER = (() => {
+  const raw = process.env.COLLECT_STEPS_FILTER;
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+})();
+
 /** @type {{ phase: string; completedSteps: { index: number; name: string }[]; logFilePath: string | null }} */
 const runState = { phase: "시작 전", completedSteps: [], logFilePath: null };
 
@@ -339,32 +345,37 @@ async function main() {
         }),
   };
 
-  const steps = [
+  const allSteps = [
     {
+      key: "blog_metrics",
       name: "블로그 일별 지표 수집",
       command: process.execPath,
       args: [path.join(ROOT_DIR, "scripts", "collect-blog-metrics.js"), resolved.blogId],
       options: { env: baseEnv },
     },
     {
+      key: "smartplace",
       name: "스마트플레이스 유입 수집",
       command: process.execPath,
       args: [path.join(ROOT_DIR, "scripts", "collect-smartplace-inflow.js"), resolved.blogId],
       options: { env: baseEnv },
     },
     {
+      key: "keyword_rank",
       name: "블로그/플레이스 키워드 순위 수집",
       command: "python",
       args: [path.join(ROOT_DIR, "scripts", "naver-rank-main.py")],
       options: { env: baseEnv },
     },
     {
+      key: "searchad",
       name: "SearchAd 일별 성과 수집",
       command: "python",
       args: [path.join(ROOT_DIR, "scripts", "naver-searchad-main.py")],
       options: { env: baseEnv },
     },
   ];
+  const steps = STEPS_FILTER ? allSteps.filter((s) => STEPS_FILTER.includes(s.key)) : allSteps;
 
   emit(`총 ${steps.length}단계 수집을 순서대로 실행합니다.`);
 

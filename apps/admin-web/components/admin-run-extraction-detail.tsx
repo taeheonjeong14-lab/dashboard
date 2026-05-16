@@ -148,10 +148,13 @@ function CopyTextButton({ text, disabled, label = '복사' }: { text: string; di
 export function AdminRunExtractionDetail({
   runId,
   embedded = false,
+  onDelete,
+  deleting = false,
 }: {
   runId: string;
-  /** 차트 데이터 2열 레이아웃 안에 넣을 때 상단 안내 축소 */
   embedded?: boolean;
+  onDelete?: () => void;
+  deleting?: boolean;
 }) {
   const [result, setResult] = useState<RunDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -396,19 +399,29 @@ export function AdminRunExtractionDetail({
     );
   }
 
+  const sectionStyle = {
+    border: '1px solid #e2e8f0',
+    background: '#fff',
+    borderRadius: 6,
+    overflow: 'hidden',
+  } satisfies React.CSSProperties;
+
   const summaryStyle: CSSProperties = {
     cursor: 'pointer',
     listStyle: 'none',
-    padding: '10px 12px',
-    fontSize: 14,
+    padding: '9px 14px',
+    fontSize: 12.5,
     fontWeight: 700,
-    color: '#0f172a',
+    color: '#334155',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-    flexWrap: 'wrap',
-    userSelect: 'none',
+    flexWrap: 'wrap' as const,
+    userSelect: 'none' as const,
+    background: '#f1f5f9',
+    borderBottom: '1px solid #e2e8f0',
+    letterSpacing: '0.01em',
   };
 
   return (
@@ -416,7 +429,12 @@ export function AdminRunExtractionDetail({
       {!embedded ? (
         <header style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>추출 결과</h1>
-          <Link href="/admin/chart-data" className="adminLegacySecondaryBtn">
+          {result.run.chartType && (
+            <span style={{ fontSize: 12, color: '#64748b', background: '#f1f5f9', padding: '3px 8px', borderRadius: 4 }}>
+              {result.run.chartType}
+            </span>
+          )}
+          <Link href="/admin/chart-data" className="adminLegacySecondaryBtn" style={{ marginLeft: 'auto' }}>
             기록 목록
           </Link>
           <button type="button" className="adminLegacySecondaryBtn" onClick={() => void fetchDetail({ silent: true })}>
@@ -424,11 +442,54 @@ export function AdminRunExtractionDetail({
           </button>
         </header>
       ) : (
-        <div style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>선택한 건 상세</span>
-          <button type="button" className="adminLegacySmallBtn" onClick={() => void fetchDetail({ silent: true })}>
-            새로고침
-          </button>
+        <div style={{ marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          {result.basicInfo?.hospitalName && (
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+              {result.basicInfo.hospitalName}
+            </span>
+          )}
+          {result.basicInfo?.patientName && (
+            <span style={{ fontSize: 13, color: '#334155' }}>
+              {result.basicInfo.patientName}
+            </span>
+          )}
+          {result.basicInfo?.ownerName && (
+            <span style={{ fontSize: 12, color: '#64748b' }}>
+              ({result.basicInfo.ownerName})
+            </span>
+          )}
+          {(result.run.friendlyId || result.run.id) && (
+            <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'ui-monospace, monospace' }}>
+              {result.run.friendlyId ?? result.run.id.slice(0, 8)}
+            </span>
+          )}
+          {result.run.chartType && (
+            <span style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: '#1d4ed8',
+              background: '#dbeafe',
+              padding: '2px 8px',
+              borderRadius: 20,
+              border: '1px solid #bfdbfe',
+              letterSpacing: '0.02em',
+            }}>
+              {result.run.chartType}
+            </span>
+          )}
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <Link href={`/admin/runs/${encodeURIComponent(runId)}`} className="adminLegacySmallBtn">
+              전체 페이지로
+            </Link>
+            <button type="button" className="adminLegacySmallBtn" onClick={() => void fetchDetail({ silent: true })}>
+              새로고침
+            </button>
+            {onDelete && (
+              <button type="button" className="adminLegacyDangerBtn" onClick={onDelete} disabled={deleting}>
+                {deleting ? '삭제 중…' : '데이터 삭제'}
+              </button>
+            )}
+          </span>
         </div>
       )}
 
@@ -438,27 +499,11 @@ export function AdminRunExtractionDetail({
         </div>
       ) : null}
 
-      <p style={{ margin: '0 0 12px', fontSize: 12, color: '#64748b' }}>
-        run <code style={{ fontSize: 11 }}>{result.run.id}</code>
-        {result.run.friendlyId ? (
-          <>
-            {' '}
-            · friendly <code style={{ fontSize: 11 }}>{result.run.friendlyId}</code>
-          </>
-        ) : null}
-        {result.run.fileName ? <> · {result.run.fileName}</> : null}
-      </p>
+      {/* 섹션 그리드: 기본 정보 + Vitals 나란히, 나머지 전체 너비 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'start' }}>
 
-      <section style={{ marginBottom: 12, padding: 12, background: '#f8fafc', border: `1px solid ${divider}`, fontSize: 13, color: '#334155' }}>
-        <strong>차트 종류</strong> ({result.run.chartType}) — {result.chartTypeNotice}
-      </section>
-
-      <section style={{ marginBottom: 10, padding: 12, background: '#fffbeb', border: `1px solid ${divider}`, fontSize: 13, color: '#854d0e' }}>
-        AI 평가·이미지 분석 패널은 추후 연동 예정입니다. (vet-report의 assessment / image-case API)
-      </section>
-
-      {/* 기본 정보 */}
-      <details open style={{ border: `1px solid ${divider}`, marginBottom: 8, background: '#fff' }}>
+      {/* 기본 정보 — 전체 너비 */}
+      <details open style={{ ...sectionStyle, gridColumn: '1 / -1' }}>
         <summary style={summaryStyle}>
           <span>기본 정보</span>
           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -519,7 +564,7 @@ export function AdminRunExtractionDetail({
             />
           </span>
         </summary>
-        <div style={{ padding: '0 12px 12px', borderTop: `1px solid ${divider}` }}>
+        <div style={{ padding: '0 12px 12px', borderTop: 'none' }}>
           {editing.basicInfo && draftBasic ? (
             <div style={{ display: 'grid', gap: 8, marginTop: 10, gridTemplateColumns: '1fr 1fr' }}>
               {(
@@ -574,8 +619,8 @@ export function AdminRunExtractionDetail({
         </div>
       </details>
 
-      {/* 예방접종 */}
-      <details open style={{ border: `1px solid ${divider}`, marginBottom: 8, background: '#fff' }}>
+      {/* 예방접종 — 전체 너비 */}
+      <details open style={{ ...sectionStyle, gridColumn: '1 / -1' }}>
         <summary style={summaryStyle}>
           <span>Vaccination · 외부기생충</span>
           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -604,8 +649,8 @@ export function AdminRunExtractionDetail({
             />
           </span>
         </summary>
-        <div style={{ padding: '8px 12px 12px', borderTop: `1px solid ${divider}`, overflow: 'auto' }}>
-          <table className="adminLegacyTable" style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+        <div style={{ padding: '8px 12px 12px', borderTop: 'none', overflow: 'auto' }}>
+          <table className="adminDetailTable">
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: 6 }}>유형</th>
@@ -694,8 +739,8 @@ export function AdminRunExtractionDetail({
         </div>
       </details>
 
-      {/* 차트 본문 */}
-      <details open style={{ border: `1px solid ${divider}`, marginBottom: 8, background: '#fff' }}>
+      {/* 차트 본문 — 전체 너비 */}
+      <details open style={{ ...sectionStyle, gridColumn: '1 / -1' }}>
         <summary style={summaryStyle}>
           <span>차트 본문 (날짜별)</span>
           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -724,41 +769,36 @@ export function AdminRunExtractionDetail({
             />
           </span>
         </summary>
-        <div style={{ padding: '8px 12px 12px', borderTop: `1px solid ${divider}` }}>
+        <div style={{ padding: '8px 12px 12px', borderTop: 'none' }}>
           {(editing.chartBody && draftChart ? draftChart : result.chartBodyByDate).map((c) => (
-            <div key={c.id} style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>{c.dateTime}</div>
-              {editing.chartBody && draftChart ? (
-                <textarea
-                  value={draftChart.find((x) => x.id === c.id)?.bodyText ?? ''}
-                  onChange={(ev) => {
-                    const v = ev.target.value;
-                    setDraftChart((rows) => rows?.map((r) => (r.id === c.id ? { ...r, bodyText: v } : r)) ?? null);
-                  }}
-                  rows={12}
-                  style={{ width: '100%', fontFamily: 'inherit', fontSize: 13, padding: 8, border: `1px solid ${divider}` }}
-                />
-              ) : (
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: 'pre-wrap',
-                    fontSize: 13,
-                    padding: 10,
-                    background: '#f8fafc',
-                    border: `1px solid ${divider}`,
-                  }}
-                >
-                  {c.bodyText || '—'}
-                </pre>
-              )}
-            </div>
+            <details key={c.id} open style={{ borderBottom: '1px solid #e2e8f0' }}>
+              <summary style={{ padding: '7px 12px', fontSize: 12, fontWeight: 700, color: '#475569', cursor: 'pointer', listStyle: 'none', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', userSelect: 'none' }}>
+                {c.dateTime}
+              </summary>
+              <div style={{ padding: '10px 12px' }}>
+                {editing.chartBody && draftChart ? (
+                  <textarea
+                    value={draftChart.find((x) => x.id === c.id)?.bodyText ?? ''}
+                    onChange={(ev) => {
+                      const v = ev.target.value;
+                      setDraftChart((rows) => rows?.map((r) => (r.id === c.id ? { ...r, bodyText: v } : r)) ?? null);
+                    }}
+                    rows={12}
+                    style={{ width: '100%', fontFamily: 'inherit', fontSize: 13, padding: 8, border: `1px solid ${divider}` }}
+                  />
+                ) : (
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, padding: 10, background: '#f8fafc', border: `1px solid ${divider}` }}>
+                    {c.bodyText || '—'}
+                  </pre>
+                )}
+              </div>
+            </details>
           ))}
         </div>
       </details>
 
-      {/* 처방·플랜 */}
-      <details open style={{ border: `1px solid ${divider}`, marginBottom: 8, background: '#fff' }}>
+      {/* 처방·플랜 — 전체 너비 */}
+      <details open style={{ ...sectionStyle, gridColumn: '1 / -1' }}>
         <summary style={summaryStyle}>
           <span>처방·플랜 (날짜별)</span>
           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -794,14 +834,17 @@ export function AdminRunExtractionDetail({
             />
           </span>
         </summary>
-        <div style={{ padding: '8px 12px 12px', borderTop: `1px solid ${divider}` }}>
+        <div style={{ borderTop: 'none' }}>
           {(editing.plan && draftPlan ? draftPlan : planGroups).map((g, gi) => (
-            <div key={g.dateTime} style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{g.dateTime}</div>
+            <details key={g.dateTime} open style={{ borderBottom: '1px solid #e2e8f0' }}>
+              <summary style={{ padding: '7px 12px', fontSize: 12, fontWeight: 700, color: '#475569', cursor: 'pointer', listStyle: 'none', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', userSelect: 'none' }}>
+                {g.dateTime}
+              </summary>
+              <div style={{ padding: '10px 12px 12px' }}>
               {!g.planRowsFromDb && g.rows.length > 0 ? (
-                <p style={{ fontSize: 12, color: '#b45309', margin: '0 0 6px' }}>DB 행 없음 — plan_text 파싱 미리보기(읽기 전용 표시와 동일). 저장 시 DB에 반영됩니다.</p>
+                <p style={{ fontSize: 12, color: '#b45309', margin: '0 0 6px' }}>DB 행 없음 — plan_text 파싱 미리보기. 저장 시 DB에 반영됩니다.</p>
               ) : null}
-              <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
+              <table className="adminDetailTable">
                 <thead>
                   <tr>
                     <th style={{ textAlign: 'left', padding: 4 }}>코드</th>
@@ -913,13 +956,14 @@ export function AdminRunExtractionDetail({
                   행 추가
                 </button>
               ) : null}
-            </div>
+              </div>
+            </details>
           ))}
         </div>
       </details>
 
-      {/* Lab */}
-      <details open style={{ border: `1px solid ${divider}`, marginBottom: 8, background: '#fff' }}>
+      {/* Lab — 전체 너비 */}
+      <details open style={{ ...sectionStyle, gridColumn: '1 / -1' }}>
         <summary style={summaryStyle}>
           <span>Lab Examination</span>
           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -955,11 +999,14 @@ export function AdminRunExtractionDetail({
             />
           </span>
         </summary>
-        <div style={{ padding: '8px 12px 12px', borderTop: `1px solid ${divider}` }}>
+        <div style={{ borderTop: 'none' }}>
           {(editing.lab && draftLab ? draftLab : result.labItemsByDate).map((g, gi) => (
-            <div key={g.dateTime} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{g.dateTime}</div>
-              <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
+            <details key={g.dateTime} open style={{ borderBottom: '1px solid #e2e8f0' }}>
+              <summary style={{ padding: '7px 12px', fontSize: 12, fontWeight: 700, color: '#475569', cursor: 'pointer', listStyle: 'none', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', userSelect: 'none' }}>
+                {g.dateTime}
+              </summary>
+              <div style={{ padding: '8px 12px 12px' }}>
+              <table className="adminDetailTable">
                 <thead>
                   <tr>
                     <th style={{ textAlign: 'left', padding: 4 }}>원문(OCR)</th>
@@ -1151,7 +1198,8 @@ export function AdminRunExtractionDetail({
                   이 날짜 그룹에 행 추가
                 </button>
               ) : null}
-            </div>
+              </div>
+            </details>
           ))}
           {editing.lab && draftLab && draftLab.length === 0 ? (
             <button
@@ -1184,8 +1232,8 @@ export function AdminRunExtractionDetail({
         </div>
       </details>
 
-      {/* Vitals */}
-      <details open style={{ border: `1px solid ${divider}`, marginBottom: 8, background: '#fff' }}>
+      {/* Vitals — 왼쪽 칸 */}
+      <details open style={sectionStyle}>
         <summary style={summaryStyle}>
           <span>Vitals (읽기 전용)</span>
           <CopyTextButton
@@ -1198,8 +1246,8 @@ export function AdminRunExtractionDetail({
             }
           />
         </summary>
-        <div style={{ padding: '8px 12px 12px', borderTop: `1px solid ${divider}`, overflow: 'auto' }}>
-          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+        <div style={{ padding: '8px 12px 12px', borderTop: 'none', overflow: 'auto' }}>
+          <table className="adminDetailTable">
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: 4 }}>일시</th>
@@ -1228,8 +1276,8 @@ export function AdminRunExtractionDetail({
         </div>
       </details>
 
-      {/* Physical */}
-      <details open style={{ border: `1px solid ${divider}`, marginBottom: 8, background: '#fff' }}>
+      {/* 신체검사 — 오른쪽 칸 */}
+      <details open style={sectionStyle}>
         <summary style={summaryStyle}>
           <span>신체검사 (읽기 전용)</span>
           <CopyTextButton
@@ -1243,34 +1291,40 @@ export function AdminRunExtractionDetail({
             }
           />
         </summary>
-        <div style={{ padding: '8px 12px 12px', borderTop: `1px solid ${divider}` }}>
+        <div style={{ borderTop: 'none' }}>
           {result.physicalExamByDate.map((g) => (
-            <div key={g.dateTime} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{g.dateTime}</div>
-              <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', padding: 4 }}>항목</th>
-                    <th style={{ textAlign: 'left', padding: 4 }}>값</th>
-                    <th style={{ textAlign: 'left', padding: 4 }}>단위</th>
-                    <th style={{ textAlign: 'left', padding: 4 }}>참고</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.items.map((i) => (
-                    <tr key={i.id}>
-                      <td style={{ padding: 4 }}>{i.itemName}</td>
-                      <td style={{ padding: 4 }}>{i.valueText}</td>
-                      <td style={{ padding: 4 }}>{i.unit ?? '—'}</td>
-                      <td style={{ padding: 4 }}>{i.referenceRange ?? '—'}</td>
+            <details key={g.dateTime} open style={{ borderBottom: '1px solid #e2e8f0' }}>
+              <summary style={{ padding: '7px 12px', fontSize: 12, fontWeight: 700, color: '#475569', cursor: 'pointer', listStyle: 'none', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', userSelect: 'none' }}>
+                {g.dateTime}
+              </summary>
+              <div style={{ padding: '8px 12px 12px' }}>
+                <table className="adminDetailTable">
+                  <thead>
+                    <tr>
+                      <th>항목</th>
+                      <th>값</th>
+                      <th>단위</th>
+                      <th>참고</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {g.items.map((i) => (
+                      <tr key={i.id}>
+                        <td>{i.itemName}</td>
+                        <td>{i.valueText}</td>
+                        <td>{i.unit ?? '—'}</td>
+                        <td>{i.referenceRange ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
           ))}
         </div>
       </details>
+
+      </div>{/* end section grid */}
     </div>
   );
 }

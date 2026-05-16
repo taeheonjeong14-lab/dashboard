@@ -6,16 +6,13 @@ import type { GeneratedContentListItem } from '@/lib/health-report-admin/types';
 
 const divider = 'rgba(15, 23, 42, 0.1)';
 
-function formatRailDate(iso: string): string {
+function formatRailDateShort(iso: string): string {
+  if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleString('ko-KR', {
-      month: 'numeric',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const d = new Date(iso);
+    return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
   } catch {
-    return iso;
+    return '—';
   }
 }
 
@@ -25,6 +22,9 @@ export default function AdminHealthReport() {
   const [runsError, setRunsError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [filterHospital, setFilterHospital] = useState('');
+  const [filterCheckupMonth, setFilterCheckupMonth] = useState('');
+  const [filterReportMonth, setFilterReportMonth] = useState('');
 
   const loadRuns = useCallback(async () => {
     setRunsLoading(true);
@@ -52,10 +52,29 @@ export default function AdminHealthReport() {
     void loadRuns();
   }, [loadRuns]);
 
+  const hospitalOptions = useMemo(
+    () => [...new Set(runs.map((r) => r.hospitalName?.trim() ?? '').filter(Boolean))].sort(),
+    [runs],
+  );
+  const checkupMonthOptions = useMemo(
+    () =>
+      [...new Set(runs.map((r) => (r.parseRunCreatedAt ?? '').slice(0, 7)).filter(Boolean))].sort().reverse(),
+    [runs],
+  );
+  const reportMonthOptions = useMemo(
+    () => [...new Set(runs.map((r) => r.createdAt.slice(0, 7)).filter(Boolean))].sort().reverse(),
+    [runs],
+  );
+
   const filteredRuns = useMemo(() => {
+    let items = runs;
+    if (filterHospital) items = items.filter((r) => (r.hospitalName?.trim() ?? '') === filterHospital);
+    if (filterCheckupMonth)
+      items = items.filter((r) => (r.parseRunCreatedAt ?? '').startsWith(filterCheckupMonth));
+    if (filterReportMonth) items = items.filter((r) => r.createdAt.startsWith(filterReportMonth));
     const q = search.trim().toLowerCase();
-    if (!q) return runs;
-    return runs.filter((r) => {
+    if (!q) return items;
+    return items.filter((r) => {
       const hay = [
         r.id,
         r.parseRunId,
@@ -69,7 +88,7 @@ export default function AdminHealthReport() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [runs, search]);
+  }, [runs, filterHospital, filterCheckupMonth, filterReportMonth, search]);
 
   useEffect(() => {
     if (filteredRuns.length === 0) {
@@ -106,7 +125,49 @@ export default function AdminHealthReport() {
             disabled={runsLoading}
           />
         </div>
-        <div style={{ maxHeight: 'min(66vh, calc(100vh - 220px))', overflow: 'auto' }}>
+        {!runsLoading && runs.length > 0 && (
+          <div className="adminRailFilterBar">
+            <select
+              className="adminRailFilterSelect"
+              style={{ flexBasis: '100%' }}
+              value={filterHospital}
+              onChange={(e) => setFilterHospital(e.target.value)}
+              aria-label="병원 필터"
+            >
+              <option value="">병원 전체</option>
+              {hospitalOptions.map((h) => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </select>
+            <select
+              className="adminRailFilterSelect"
+              value={filterCheckupMonth}
+              onChange={(e) => setFilterCheckupMonth(e.target.value)}
+              aria-label="검진 날짜 필터"
+            >
+              <option value="">검진월 전체</option>
+              {checkupMonthOptions.map((m) => (
+                <option key={m} value={m}>
+                  {`${m.slice(2, 4)}년 ${String(Number(m.slice(5, 7)))}월`}
+                </option>
+              ))}
+            </select>
+            <select
+              className="adminRailFilterSelect"
+              value={filterReportMonth}
+              onChange={(e) => setFilterReportMonth(e.target.value)}
+              aria-label="리포트 생성 날짜 필터"
+            >
+              <option value="">생성월 전체</option>
+              {reportMonthOptions.map((m) => (
+                <option key={m} value={m}>
+                  {`${m.slice(2, 4)}년 ${String(Number(m.slice(5, 7)))}월`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div style={{ maxHeight: 'min(66vh, calc(100vh - 260px))', overflow: 'auto' }}>
           {runsLoading ? (
             <p style={{ margin: '10px 10px', fontSize: 12, color: '#64748b' }}>불러오는 중…</p>
           ) : runsError ? (
@@ -126,12 +187,17 @@ export default function AdminHealthReport() {
                 onClick={() => setSelectedId(r.parseRunId)}
                 disabled={runsLoading}
               >
-                <span style={{ display: 'block', fontWeight: 700, color: 'inherit' }}>
-                  {r.patientName?.trim() || r.friendlyId?.trim() || r.parseRunId.slice(0, 8)}
-                </span>
-                <span className="adminRailSub">{r.hospitalName?.trim() || '병원명 없음'}</span>
-                <span className="adminRailSub" style={{ marginTop: 2 }}>
-                  {formatRailDate(r.updatedAt)}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ fontWeight: 700, color: 'inherit', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.hospitalName?.trim() || '병원명 없음'}
+                  </span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
+                    {formatRailDateShort(r.updatedAt)}
+                  </span>
+                </div>
+                <span className="adminRailSub">
+                  {r.patientName?.trim() ? `${r.patientName.trim()} · ` : ''}
+                  {r.friendlyId?.trim() ?? r.parseRunId.slice(0, 8)}
                 </span>
               </button>
             ))

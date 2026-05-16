@@ -32,4 +32,5 @@ export type GeneratedContentListItem = {
   friendlyId: string | null;
   patientName: string | null;
   hospitalName: string | null;
+  parseRunCreatedAt: string | null;
 };

@@ -105,7 +105,7 @@ function parseCollectOutput(output) {
   return { steps, upserts };
 }
 
-function spawnAndCapture(scriptPath, args, onBatchHospitalDone) {
+function spawnAndCapture(scriptPath, args, extraEnv, onBatchHospitalDone) {
   return new Promise((resolve) => {
     const chunks = [];
     let lineBuffer = "";
@@ -114,6 +114,7 @@ function spawnAndCapture(scriptPath, args, onBatchHospitalDone) {
       COLLECT_ALL_NO_FILE_LOG: "1",
       PYTHONUTF8: "1",
       PYTHONIOENCODING: "utf-8",
+      ...extraEnv,
     };
     const child = spawn(process.execPath, [scriptPath, ...args], {
       cwd: ROOT_DIR,
@@ -195,7 +196,8 @@ async function pollAndRun() {
       }
     : undefined;
 
-  const { code, output } = await spawnAndCapture(scriptPath, args, onBatchHospitalDone);
+  const extraEnv = job.steps_filter ? { COLLECT_STEPS_FILTER: JSON.stringify(job.steps_filter) } : {};
+  const { code, output } = await spawnAndCapture(scriptPath, args, extraEnv, onBatchHospitalDone);
   const { steps, upserts } = parseCollectOutput(output);
   const status = code === 0 ? "done" : "failed";
 

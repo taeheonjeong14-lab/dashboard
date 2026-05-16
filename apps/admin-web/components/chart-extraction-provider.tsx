@@ -18,7 +18,7 @@ const EXTRACT_URL = '/api/admin/chart-extraction';
 
 type ExtractionStatus = 'idle' | 'running' | 'success' | 'error';
 
-type ExtractApiPayload = { runId?: string; friendlyId?: string; error?: string };
+type ExtractApiPayload = { runId?: string; friendlyId?: string; error?: string; _debug?: unknown };
 
 type ChartExtractionContextValue = {
   status: ExtractionStatus;
@@ -192,6 +192,9 @@ export function ChartExtractionProvider({ children }: { children: ReactNode }) {
         const res = await fetch(EXTRACT_URL, { method: 'POST', body: formData, credentials: 'include' });
         const { payload, rawText } = await readJsonPayload<ExtractApiPayload>(res);
         if (!res.ok) throw new Error(normalizeExtractError(payload?.error, rawText));
+        if (payload?._debug) {
+          try { sessionStorage.setItem('lastExtractionDebug', JSON.stringify(payload._debug)); } catch { /* ignore */ }
+        }
         if (!payload?.runId) throw new Error('분석은 완료되었으나 저장된 실행 ID를 받지 못했습니다.');
         setLastRunId(payload.runId);
         setLastFriendlyId(typeof payload.friendlyId === 'string' ? payload.friendlyId : null);

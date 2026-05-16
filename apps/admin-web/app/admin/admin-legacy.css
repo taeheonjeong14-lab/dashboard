@@ -1,10 +1,10 @@
 /* 관리자 공통 CSS — 모던 SaaS 스타일 */
 :root {
-  --admin-secondary-rail-width: 240px;
+  --admin-secondary-rail-width: 280px;
   --admin-divider: rgba(15, 23, 42, 0.08);
-  --admin-main-inset-start: 20px;
-  --admin-main-inset-end: 24px;
-  --admin-col-content-pad-y: 16px;
+  --admin-main-inset-start: 16px;
+  --admin-main-inset-end: 16px;
+  --admin-col-content-pad-y: 12px;
   --admin-radius: 6px;
   --admin-radius-lg: 10px;
   --admin-radius-xl: 14px;
@@ -40,7 +40,7 @@
 
 .adminLayoutMainPane {
   min-width: 0;
-  padding: 0 0 40px;
+  padding: 0 0 20px;
 }
 
 .adminLayoutMainColumnInset {
@@ -52,7 +52,7 @@
 .adminLegacyBlockBleed {
   margin-left: calc(-1 * var(--admin-main-inset-start));
   margin-right: calc(-1 * var(--admin-main-inset-end));
-  padding: 20px var(--admin-main-inset-end) 20px var(--admin-main-inset-start);
+  padding: 14px var(--admin-main-inset-end) 14px var(--admin-main-inset-start);
   border: 0;
   border-bottom: 1px solid var(--admin-divider);
   background: transparent;
@@ -105,6 +105,33 @@
 }
 
 /* ── 2차 Rail 아이템 ──────────────────────────── */
+.adminRailFilterBar {
+  padding: 6px 10px 8px;
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--admin-divider);
+}
+
+.adminRailFilterSelect {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 11.5px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 3px 4px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.adminRailFilterSelect:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .adminRailRow {
   display: block;
   width: 100%;
@@ -209,9 +236,9 @@ details > summary::-webkit-details-marker { display: none; }
 
 /* ── 버튼 ─────────────────────────────────────── */
 .adminLegacySecondaryBtn {
-  padding: 8px 16px;
-  border-radius: var(--admin-radius);
-  font-size: 13.5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -235,9 +262,9 @@ details > summary::-webkit-details-marker { display: none; }
 }
 
 .adminLegacyPrimaryBtn {
-  padding: 8px 16px;
-  border-radius: var(--admin-radius);
-  font-size: 13.5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -351,6 +378,35 @@ details > summary::-webkit-details-marker { display: none; }
   color: #0c4a6e;
 }
 
+/* ── 디테일 패널 테이블 ──────────────────────── */
+.adminDetailTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.adminDetailTable th {
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 600;
+  font-size: 11px;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+.adminDetailTable td {
+  padding: 6px 8px;
+  color: #0f172a;
+  vertical-align: middle;
+  border-bottom: 1px solid #f1f5f9;
+}
+.adminDetailTable tbody tr:last-child td {
+  border-bottom: none;
+}
+.adminDetailTable tbody tr:hover td {
+  background: #f8fafc;
+}
+
 /* ── 테이블 ───────────────────────────────────── */
 .adminLegacyTableWrap {
   width: 100%;
@@ -414,8 +470,8 @@ details > summary::-webkit-details-marker { display: none; }
 .adminLegacySmallBtn {
   border: 1px solid #e2e8f0;
   background: #f8fafc;
-  border-radius: 5px;
-  padding: 5px 10px;
+  border-radius: 6px;
+  padding: 5px 12px;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -439,8 +495,8 @@ details > summary::-webkit-details-marker { display: none; }
 .adminLegacyDangerBtn {
   border: 1px solid rgba(185, 28, 28, 0.3);
   background: transparent;
-  border-radius: 5px;
-  padding: 5px 10px;
+  border-radius: 6px;
+  padding: 5px 12px;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
